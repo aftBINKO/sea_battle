@@ -6,7 +6,13 @@
 ## Информация
 
 Последняя версия легендарного морского боя стала бесплатной. Реализация проекта приостановлена.
-Скачать игру можно в релизах либо на GameJolt https://gamejolt.com/games/sea_battle/790394
+Скачать игру можно следующим образом
+1. GameJolt
+   https://gamejolt.com/games/sea_battle/790394
+2. zeroFantasy
+   http://zerofantasy.ru/game/90
+3. Релизы
+   https://github.com/aftBINKO/sea_battle/releases/tag/v1.3
 
 ## [СПОЙЛЕРЫ!!!] Сюжет
 
