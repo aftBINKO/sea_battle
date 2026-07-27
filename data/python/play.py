@@ -1,7 +1,12 @@
 from .main_functions import terminate, create_sprite, get_values, load_image, set_statistic, \
     add_fon, custom_font
 from .custom_map import Customization
+import asyncio
 import pygame as pg
+# см. комментарий в custom_map.py: группы и картинки создаются при импорте
+import pygame.sprite
+import pygame.image
+import pygame.transform
 import os
 import random
 
@@ -284,9 +289,7 @@ class GameOver:
         if difficulty == 5 and win:
             set_statistic(path_statistic, 1, key="impossible_levels")
 
-        self.menu()
-
-    def menu(self):
+    async def menu(self):
         """Меню завершения игры"""
         fon = add_fon(get_values(self.path_config, "theme")[0], self.size)
 
@@ -341,6 +344,7 @@ class GameOver:
 
             pg.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)
 
 
 class PlayWithBot:
@@ -349,21 +353,35 @@ class PlayWithBot:
     font_2 = os.path.join("data", os.path.join("fonts", "font_2.ttf"))
 
     def __init__(self, screen, fps, path, xp, difficulty, theme, mission=None, name="Игрок"):
-
-        all_remove()
-        global display_width, display_height, list_pos_ship_bot, list_pos_ship_player
-
+        # В конструкторе только лёгкая подготовка: сама игра — в run(),
+        # потому что игровые циклы стали асинхронными.
         if theme:
             self.t = (255, 255, 255), (0, 0, 0)
         else:
             self.t = (0, 0, 0), (255, 255, 255)
 
+        self.sc = screen
+        self.fps = fps
+        self.path = path
+        self.xp = xp
+        self.difficulty = difficulty
+        self.theme = theme
+        self.mission = mission
+        self.name = name
+
+    async def run(self):
+        """Расстановка кораблей и партия"""
+        all_remove()
+        global display_width, display_height, list_pos_ship_bot, list_pos_ship_player
+
+        customization = Customization(self.sc, self.fps, self.path, self.theme)
         try:
-            self.board, self.ships, list_pos_ship_player = Customization(screen, fps, path,
-                                                                         theme).bir()
+            await customization.map_customization()
         except SystemExit:
             return
-        self.bot = Bot(difficulty, list_pos_ship_player)
+        self.board, self.ships, list_pos_ship_player = customization.bir()
+
+        self.bot = Bot(self.difficulty, list_pos_ship_player)
         self.board_bot, list_pos_ship_bot = self.bot.bir()
 
         self.all_sprites_1 = pg.sprite.Group()
@@ -374,17 +392,11 @@ class PlayWithBot:
         display_width = sur.get_width()
         display_height = sur.get_height()
 
-        self.sc = screen
-        self.fps = fps
-        self.path = path
-        self.xp = xp
-        self.difficulty = difficulty
-        self.mission = mission
-        self.name = name
         self.clock = pg.time.Clock()
         self.size = int(display_width * 0.035)
         self.screensize = tuple(
-            map(int, (get_values(os.path.join(path, "config.json"), "screensize")[0].split("x"))))
+            map(int, (get_values(os.path.join(self.path, "config.json"),
+                                 "screensize")[0].split("x"))))
         self.co = int(display_width * 0.02)
         self.font = pg.font.Font(self.font_2, int(self.size * 0.5))
 
@@ -392,9 +404,14 @@ class PlayWithBot:
         self.map_indent_left = 50
 
         self.add_cell()
-        self.main()
+        await self.main()
 
-    def main(self):
+    async def game_over(self, win):
+        """Показать экран завершения партии"""
+        await GameOver(self.sc, self.fps, self.path, win, n_player, self.xp,
+                       self.difficulty, mission=self.mission).menu()
+
+    async def main(self):
         running = True
 
         x = pg.sprite.Sprite()
@@ -415,32 +432,34 @@ class PlayWithBot:
                     pg.mixer.Sound(self.click).play()
                     return
 
-                if n_player == 20:
-                    if self.xp == "Farm":
-                        self.xp = n_player * [0, 5, 10, 20, 40, 500][self.difficulty]
-                        win = None
-                    else:
-                        win = True
-                    return GameOver(self.sc, self.fps, self.path, win, n_player, self.xp,
-                                    self.difficulty, mission=self.mission)
-                elif n_bot == 20:
-                    if self.xp == "Farm":
-                        self.xp = n_player * [0, 5, 10, 20, 40, 500][self.difficulty]
-                        win = None
-                    else:
-                        self.xp = 0
-                        win = False
-                    return GameOver(self.sc, self.fps, self.path, win, n_player, self.xp,
-                                    self.difficulty, mission=self.mission)
-
-                if num % 2 == 1:
-                    rect = self.bot.xod_008()
-                    self.all_sprites_1.update(self.board, rect, 1)
-                    self.all_sprites_1.update(self.board, test_bax(1), 20)
-
-                else:
+                if num % 2 == 0:  # ход игрока — стреляем по нажатию
                     self.all_sprites_2.update(self.board_bot, event)
                     self.all_sprites_2.update(self.board, test_bax(), 30)
+
+            # Проверка конца партии и ход бота вынесены из цикла событий:
+            # на сенсорном экране событий мыши между касаниями нет, и раньше
+            # бот просто не ходил, пока игрок не коснётся экрана ещё раз.
+            if n_player == 20:
+                if self.xp == "Farm":
+                    self.xp = n_player * [0, 5, 10, 20, 40, 500][self.difficulty]
+                    win = None
+                else:
+                    win = True
+                return await self.game_over(win)
+
+            elif n_bot == 20:
+                if self.xp == "Farm":
+                    self.xp = n_player * [0, 5, 10, 20, 40, 500][self.difficulty]
+                    win = None
+                else:
+                    self.xp = 0
+                    win = False
+                return await self.game_over(win)
+
+            if num % 2 == 1:  # ход бота
+                rect = self.bot.xod_008()
+                self.all_sprites_1.update(self.board, rect, 1)
+                self.all_sprites_1.update(self.board, test_bax(1), 20)
 
             self.map_draw(self.map_indent_left, self.map_indent_top)
             self.map_draw_2(self.map_indent_left + int(display_width * 0.5), self.map_indent_top)
@@ -453,6 +472,7 @@ class PlayWithBot:
 
             self.clock.tick(self.fps)
             pg.display.flip()
+            await asyncio.sleep(0)
 
     def map_draw(self, x, y):
 
@@ -545,7 +565,7 @@ class Play:
 
         return "replay"
 
-    def menu(self):
+    async def menu(self):
         """Меню игры"""
 
         clock = pg.time.Clock()
@@ -682,6 +702,7 @@ class Play:
 
             pg.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)
 
 
 class Board:

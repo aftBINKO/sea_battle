@@ -1,7 +1,17 @@
+import asyncio
+
 import pygame as pg
+# В wasm-сборке pygame подмодули не привязаны к пакету автоматически, а этот
+# модуль создаёт спрайт-группы прямо при импорте — импортируем их явно.
+import pygame.sprite
+import pygame.transform
 import os
 
 from .main_functions import create_sprite, get_values, terminate
+
+#: На сколько пикселей можно увести палец, чтобы касание всё ещё считалось
+#: нажатием, а не перетаскиванием.
+TAP_SLOP = 12
 
 display_width = 0
 display_height = 0
@@ -141,7 +151,21 @@ class Ship(pg.sprite.Sprite):
         self.hover = False
         self.flip = False
 
+        # состояние касания: где нажали и как корабль был повёрнут в тот момент
+        self.press_pos = None
+        self.flip_at_press = False
+
         self.installed_map = False
+
+    def rotate(self):
+        """Повернуть корабль на 90°"""
+        self.image = flip_image(self.image)
+        x_00 = self.rect.x
+        y_00 = self.rect.y
+        self.rect = self.image.get_rect()
+        self.rect.x = x_00
+        self.rect.y = y_00
+        self.flip = not self.flip
 
     def update(self, screen, event):
         if self.installed_map:
@@ -151,6 +175,8 @@ class Ship(pg.sprite.Sprite):
                 self.hover = True
                 self.hover_x = self.rect.x - event.pos[0]
                 self.hover_y = self.rect.y - event.pos[1]
+                self.press_pos = event.pos
+                self.flip_at_press = self.flip
 
             if event.type == pg.MOUSEBUTTONUP and self.hover:
                 all_sprites_cell.update(0, self.return_pos(), 1)
@@ -166,31 +192,26 @@ class Ship(pg.sprite.Sprite):
                     self.rect.y = if_yes_rect_map[1]
 
                 else:
-                    if self.flip:
-                        self.image = flip_image(self.image)
-                        self.flip = False
-                        x_00 = self.rect.x
-                        y_00 = self.rect.y
-                        self.rect = self.image.get_rect()
-                        self.rect.x = x_00
-                        self.rect.y = y_00
+                    # Касание без перетаскивания — это поворот. На телефоне
+                    # клавиши "пробел" нет, поэтому иначе корабль не развернуть.
+                    if self.press_pos is not None and abs(
+                            event.pos[0] - self.press_pos[0]) <= TAP_SLOP and abs(
+                            event.pos[1] - self.press_pos[1]) <= TAP_SLOP:
+                        target_flip = not self.flip_at_press
+                    else:
+                        target_flip = self.flip_at_press
+
+                    if self.flip != target_flip:
+                        self.rotate()
 
                     self.rect.x = self.old_x
                     self.rect.y = self.old_y
 
                 self.hover = False
+                self.press_pos = None
 
             if self.hover and event.type == pg.KEYDOWN and event.key == pg.K_SPACE:
-                self.image = flip_image(self.image)
-                x_00 = self.rect.x
-                y_00 = self.rect.y
-                self.rect = self.image.get_rect()
-                self.rect.x = x_00
-                self.rect.y = y_00
-                if self.flip:
-                    self.flip = False
-                else:
-                    self.flip = True
+                self.rotate()
 
             try:
                 if self.hover:
@@ -258,7 +279,6 @@ class Customization:
 
         self.add_cells()
         self.add_ship()
-        self.map_customization()
 
     def map_draw(self, x, y):
 
@@ -289,14 +309,14 @@ class Customization:
         self.sc.blit(text, (self.x_ship, self.y_ship))
 
         font = pg.font.Font(self.font_2, int(self.size * 0.4))
-        text = font.render("Для поворота корабля нажмите пробел", True, self.t[1])
+        text = font.render("Нажмите на корабль (или пробел), чтобы повернуть", True, self.t[1])
         self.sc.blit(text, (self.x_ship - 30, int(display_height * 0.69)))
 
         text = font.render("Если корабль не ставиться значит там его нельзя поставить!!!!", True,
                            self.t[1])  # логично
         self.sc.blit(text, (self.x_ship - 30, int(display_height * 0.4 + 240)))
 
-    def map_customization(self):
+    async def map_customization(self):
         running = True
 
         x = pg.sprite.Sprite()
@@ -355,6 +375,7 @@ class Customization:
             self.all_sprite_gg.draw(self.sc)
             self.clock.tick(self.fps)
             pg.display.flip()
+            await asyncio.sleep(0)
 
     def add_ship(self):
         x = int(display_width * 0.6)

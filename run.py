@@ -1,64 +1,42 @@
 # v1.3
-import ctypes.wintypes
-
-import requests
 import pygame
 import os
 
 from datetime import datetime
-from sys import exit
 
 from data.python.main_functions import create_window, format_xp, extract_files, get_values, \
     set_statistic, get_values_sqlite
+from data.python.platform_compat import user_data_dir, restore, persist
 from data.python.achievements import Achievements, Titles
 from data.python.menu import Menu, Statistic, Instruction
 from data.python.settings import Settings, About
 from data.python.play import Play, PlayWithBot
 
 
-def run():
+async def run():
     """Запуск игры"""
 
-    # # проверим лицензию
-    # try:
-    #     user_login = user_data["user_login"]
-    #     if user_login is None:
-    #         raise NotAuthorizedError
-    #
-    #     login_request = "https://seabattle.aft-services.ru/" + \
-    #                     f"{user_login['email']}/{user_login['password']}/api/get_data"
-    #     response = requests.get(login_request)
-    #     if not response.json()["user"]["is_activated"]:
-    #         raise NotLicensedError("Купите игру, чтобы играть")
-    # except NotAuthorizedError as error:
-    #     raise NotAuthorizedError(error)
-    # except NotLicensedError as error:
-    #     raise NotLicensedError(error)
-    # except Exception as error:
-    #     raise AuthorizationError(f'Ошибка авторизации: {error.__class__.__name__} "{error}"')
-
-    # получим путь к документам пользователя
-    buf = ctypes.create_unicode_buffer(ctypes.wintypes.MAX_PATH)
-    ctypes.windll.shell32.SHGetFolderPathW(None, 5, None, 0, buf)
-    path = buf.value
-
     """Основные переменные"""
-    path, archive, cfg, ach, stat = os.path.join(path, "Sea Battle"), os.path.join(
+    path, archive, cfg, ach, stat = user_data_dir(), os.path.join(
         "data", os.path.join("packages",
                              "files.zip")), "config.json", "achievements.sqlite", "statistic.json"
     path_config, path_achievements, path_statistic = os.path.join(path, cfg), os.path.join(
         path, ach), os.path.join(path, stat)
 
-    if not os.path.isdir(path):
-        os.mkdir(path)
-        extract_files(archive, path, a=True)
-    else:
-        if not os.path.isfile(path_config):
-            extract_files(archive, path, cfg)
-        if not os.path.isfile(path_achievements):
-            extract_files(archive, path, ach)
-        if not os.path.isfile(path_statistic):
-            extract_files(archive, path, stat)
+    os.makedirs(path, exist_ok=True)
+
+    # В браузере файловая система живёт в памяти, поэтому сначала пробуем
+    # поднять сохранения из localStorage, и лишь потом достаём эталонные.
+    restore(path)
+
+    if not os.path.isfile(path_config):
+        extract_files(archive, path, cfg)
+    if not os.path.isfile(path_achievements):
+        extract_files(archive, path, ach)
+    if not os.path.isfile(path_statistic):
+        extract_files(archive, path, stat)
+
+    persist(path)
 
     """Инициализация"""
     pygame.init()
@@ -70,11 +48,12 @@ def run():
         screen, fps, path), Achievements(screen, fps, path)
 
     pygame.mouse.set_visible(False)  # погашаем мышь
-    menu.screensaver()  # заставка
+    await menu.screensaver()  # заставка
     pygame.mouse.set_visible(True)  # показываем мышь
 
     # переменная push означает, получено ли достижение сейчас, чтобы уведомить об этом игрока
     push = achievements.set_progress(1, 1, True)  # достижение за вход в игру
+    persist(path)  # иначе награда за вход потеряется, если закрыть вкладку прямо в меню
 
     while True:
         x = menu.get_n()  # сохраним значение x в переменную
@@ -85,72 +64,74 @@ def run():
         push = None  # обнулили
         menu.set_n(x)  # и вставим обратно
 
-        result = menu.menu()  # меню
+        result = await menu.menu()  # меню
 
         if result == "Settings":
             while True:  # цикл был создан для того, чтобы выходить из подменю в меню настройки
-                about, result_settings = About(screen, fps, path_config), settings.menu()
+                about, result_settings = About(screen, fps, path_config), await settings.menu()
                 if result_settings == "apply":
                     screen, fps = create_window(path)  # обновляем экран
                     break
                 elif result_settings == "developers":
-                    about.menu()
+                    await about.menu()
                 else:
                     break
 
         elif result == "Achievements":
             while True:
-                titles, result_achievements = Titles(screen, fps, path), achievements.menu()
+                titles, result_achievements = Titles(screen, fps, path), await achievements.menu()
                 if result_achievements is None:
                     break
                 elif result_achievements == "titles":
                     while True:
-                        if titles.menu() is None:
+                        if await titles.menu() is None:
                             break
 
         elif result == "Statistic":
             statistic = Statistic(screen, fps, path)
-            statistic.menu()
+            await statistic.menu()
 
         elif result == "Instruction":
             instruction = Instruction(screen, fps, path)
-            instruction.menu()
+            await instruction.menu()
 
         elif result == "Play_With_Bot":
             d = ["easiest", "easy", "normal", "hard", "impossible"].index(
                 get_values(path_config, "difficulty")[0]) + 1  # получаем сложность
             theme_value = get_values(path_config, "theme")[0]
-            PlayWithBot(screen, fps, path, [0, 150, 300, 600, 1200, 10000][d], d,
-                        theme_value == "day" or (theme_value == "by_time_of_day" and 8 <= int(
-                            datetime.now().time().strftime("%H")) <= 18))
+            await PlayWithBot(screen, fps, path, [0, 150, 300, 600, 1200, 10000][d], d,
+                              theme_value == "day" or (
+                                      theme_value == "by_time_of_day" and 8 <= int(
+                                  datetime.now().time().strftime("%H")) <= 18)).run()
 
         elif result == "Farm":
             d = ["easiest", "easy", "normal", "hard", "impossible"].index(
                 get_values(path_config, "difficulty")[0]) + 1  # получаем сложность
             theme_value = get_values(path_config, "theme")[0]
-            PlayWithBot(screen, fps, path, "Farm", d,
-                        theme_value == "day" or (theme_value == "by_time_of_day" and 8 <= int(
-                            datetime.now().time().strftime("%H")) <= 18))
+            await PlayWithBot(screen, fps, path, "Farm", d,
+                              theme_value == "day" or (
+                                      theme_value == "by_time_of_day" and 8 <= int(
+                                  datetime.now().time().strftime("%H")) <= 18)).run()
 
         elif result == "Play":
             while True:
                 play = Play(screen, fps, path)
                 theme_value = get_values(path_config, "theme")[0]
-                result_play = play.menu()
+                result_play = await play.menu()
                 if result_play is None:
                     break
                 elif result_play != "replay":
-                    PlayWithBot(screen, fps, path, *result_play,
-                                theme_value == "day" or (
-                                        theme_value == "\
+                    await PlayWithBot(screen, fps, path, *result_play,
+                                      theme_value == "day" or (
+                                              theme_value == "\
 by_time_of_day" and 8 <= int(datetime.now().time().strftime("%H")) <= 18),
-                                get_values(path_statistic, "mission")[0], "Андрей")
+                                      get_values(path_statistic, "mission")[0], "Андрей").run()
                     break
 
         elif result == "Titles":
             titles = Titles(screen, fps, path)
             while True:
-                if titles.menu() is None:
+                if await titles.menu() is None:
                     break
 
         """Установка прогресса для достижений"""
@@ -195,6 +176,5 @@ by_time_of_day" and 8 <= int(datetime.now().time().strftime("%H")) <= 18),
             path_achievements, "achievements", "progress = 1", "id")),
                       key="completed_achievements", add=False)
 
-
-if __name__ == "__main__":
-    exit(run())
+        # весь прогресс за этот заход сохраняем в браузерное хранилище
+        persist(path)

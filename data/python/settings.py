@@ -1,14 +1,15 @@
-import json
-import sqlite3
-
-import requests
+import asyncio
 
 from .main_functions import terminate, load_image, create_sprite, get_values, extract_files, \
-    add_fon, set_values, get_values_sqlite, custom_font
+    add_fon, set_values, custom_font
 
-import webbrowser
 import pygame
 import os
+
+try:  # в браузере модуля может не быть, ссылки тогда просто не открываются
+    import webbrowser
+except ImportError:
+    webbrowser = None
 
 
 class Settings:
@@ -115,7 +116,7 @@ class Settings:
         # except Exception:
         #     return -1
 
-    def menu(self):
+    async def menu(self):
         """Меню настроек"""
         clock = pygame.time.Clock()
         fon = pygame.transform.scale(load_image("fon_3.png"), self.size)
@@ -330,6 +331,7 @@ class Settings:
 
             pygame.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)
 
 
 class About:
@@ -346,7 +348,7 @@ class About:
             map(int, (get_values(
                 path_config, "screensize")[0].split("x")))), pygame.USEREVENT + 1, path_config
 
-    def menu(self):
+    async def menu(self):
         """Меню с информацией"""
         fon = add_fon(get_values(self.path_config, "theme")[0], self.size)
 
@@ -382,24 +384,24 @@ class About:
         thank = pygame.sprite.Sprite()
         create_sprite(thank, "thank.png", 100, 250, about_sprites)
 
-        pygame.time.set_timer(self.update, 200)
-        n = 1
+        # set_timer в WASM не работает, поэтому кадр анимации логотипа
+        # переключаем по счётчику кадров: 200 мс — это fps / 5 кадров.
+        n, animation_frames, animation_period = 1, 0, max(1, self.fps // 5)
 
         aft_games = pygame.sprite.Sprite()
         create_sprite(aft_games, os.path.join("animate", f"animate_{n}.png"), 100, 150,
                       about_sprites)
         while True:
+            if n < 5:
+                animation_frames += 1
+                if animation_frames >= animation_period:
+                    animation_frames = 0
+                    n += 1
+                    aft_games.image = load_image(os.path.join("animate", f"animate_{n}.png"))
+
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     terminate()
-
-                elif event.type == self.update:
-                    if n >= 5:
-                        pygame.time.set_timer(self.update, 0)
-
-                    else:
-                        n += 1
-                        aft_games.image = load_image(os.path.join("animate", f"animate_{n}.png"))
 
                 elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
                     if x.rect.collidepoint(event.pos):
@@ -432,10 +434,11 @@ class About:
                             pygame.mixer.Sound(self.enter).play()
                             link = "https://www.donationalerts.com/r/binko"
 
-                        try:
-                            webbrowser.open(link, new=0)
-                        except TypeError:
-                            pass
+                        if link is not None and webbrowser is not None:
+                            try:
+                                webbrowser.open(link, new=0)
+                            except Exception:
+                                pass
 
                 elif event.type == pygame.KEYDOWN and event.key == pygame.K_ESCAPE:
                     return
@@ -463,3 +466,4 @@ class About:
 
             pygame.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)

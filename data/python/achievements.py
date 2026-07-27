@@ -1,3 +1,4 @@
+import asyncio
 import sqlite3
 import pygame
 import os
@@ -36,7 +37,7 @@ class Achievements:
             self.achievements = sorted(sorted(s, key=lambda x: int(x[3]), reverse=True),
                                        key=lambda x: float(x[4]), reverse=True)
 
-    def menu(self):
+    async def menu(self):
         """Меню достижений"""
         fon = pygame.transform.scale(load_image("fon_4.png"), self.size)
 
@@ -162,6 +163,7 @@ WHERE id = {achievement[8]}""").fetchone()[0], (255, 255, 0),
 
             pygame.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)
 
     def set_progress(self, number, i, add=False):
         """Установить прогресс"""
@@ -223,7 +225,7 @@ class Titles:
                                                key=lambda x: x[1]), key=lambda x: int(x[0])),
                                  key=lambda x: int(x[3]), reverse=True)
 
-    def menu(self):
+    async def menu(self):
         """Меню титулов"""
         fon, s = pygame.transform.scale(load_image("fon_5.png"), self.size), pygame.mixer.Sound(
             self.click)
@@ -300,3 +302,4 @@ class Titles:
 
             pygame.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)

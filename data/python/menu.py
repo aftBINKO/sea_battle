@@ -1,17 +1,24 @@
+import asyncio
 import os
 import sqlite3
 
 import pygame
-from cv2 import VideoCapture  # для воспроизведения заставки по кадрам
 
 from .main_functions import terminate, create_sprite, put_sprite, format_xp, get_values, \
     get_values_sqlite, add_fon, load_image, extract_files, custom_font
+
+try:  # для воспроизведения заставки по кадрам; в браузере OpenCV недоступен
+    from cv2 import VideoCapture
+except ImportError:
+    VideoCapture = None
 
 
 class Menu:
     """Главное меню"""
 
-    sound_screensaver = os.path.join("data", os.path.join("sound", "screensaver.wav"))
+    # ogg вместо wav: в 20 раз легче и это единственный формат, который
+    # pygbag принимает для веб-сборки
+    sound_screensaver = os.path.join("data", os.path.join("sound", "screensaver.ogg"))
     package = os.path.join("data", os.path.join("packages", "files.zip"))
     sound_achievement = os.path.join("data", os.path.join("sound", "achievement.ogg"))
     click = os.path.join("data", os.path.join("sound", "click.ogg"))
@@ -28,8 +35,13 @@ class Menu:
         self.path_screensaver = os.path.join("data",
                                              os.path.join("video", f"screensaver{self.size[1]}.mp4"))
 
-    def screensaver(self):
+    async def screensaver(self):
         """Заставка"""
+        if VideoCapture is None:
+            # В вебе видео весит 8 МБ и OpenCV недоступен — показываем статичную
+            # заставку под тот же звук, её можно пропустить касанием.
+            return await self._screensaver_static()
+
         # воспроизводим видео, в соответствии разрешения
         cap = VideoCapture(self.path_screensaver)
 
@@ -56,9 +68,60 @@ class Menu:
                 pass
 
             pygame.display.update()
+            await asyncio.sleep(0)
         s.stop()
 
-    def menu(self):
+    async def _screensaver_static(self):
+        """Заставка без видео: логотип и название под звук вступления"""
+        try:
+            sound = pygame.mixer.Sound(self.sound_screensaver)
+            sound.play()
+        except pygame.error:
+            sound = None
+
+        fon = add_fon(get_values(self.path_config, "theme")[0], self.size)
+
+        logo = pygame.transform.scale(load_image("aft_games.png"), (200, 200))
+        logo_rect = logo.get_rect(center=(self.size[0] // 2, self.size[1] // 2 - 50))
+
+        title = pygame.font.Font(self.font_1, 90).render("Sea Battle", True, (255, 255, 255))
+        title_rect = title.get_rect(center=(self.size[0] // 2, self.size[1] // 2 + 120))
+
+        hint = pygame.font.Font(self.font_2, 25).render(
+            "нажмите, чтобы продолжить", True, (192, 192, 192))
+        hint_rect = hint.get_rect(center=(self.size[0] // 2, self.size[1] - 60))
+
+        clock, frames, total = pygame.time.Clock(), 0, self.fps * 5
+        while frames < total:
+            frames += 1
+
+            for event in pygame.event.get():
+                if event.type == pygame.QUIT:
+                    terminate()
+                elif event.type in (pygame.MOUSEBUTTONDOWN, pygame.KEYDOWN):
+                    frames = total
+
+            # плавное появление и затухание
+            if frames < self.fps:
+                alpha = int(255 * frames / self.fps)
+            elif frames > total - self.fps:
+                alpha = int(255 * (total - frames) / self.fps)
+            else:
+                alpha = 255
+
+            self.screen.blit(fon, (0, 0))
+            for surface, rect in ((logo, logo_rect), (title, title_rect), (hint, hint_rect)):
+                surface.set_alpha(alpha)
+                self.screen.blit(surface, rect)
+
+            pygame.display.flip()
+            clock.tick(self.fps)
+            await asyncio.sleep(0)
+
+        if sound is not None:
+            sound.stop()
+
+    async def menu(self):
         """Меню"""
         if int(get_values(self.path_statistic, "mission")[0]) > 1:
             bot, farm = "Play_With_Bot", "Farm"
@@ -96,7 +159,9 @@ class Menu:
                                                "image")[0][0], self.size[0] - 100,
                           self.size[1] - 100, menu_sprites)
 
-        o, push, timer, timer_flag, back, up = -100, None, pygame.USEREVENT + 1, False, False, True
+        # pygame.time.set_timer в WASM не реализован, поэтому выдержку в 3
+        # секунды перед уходом плашки считаем кадрами.
+        o, push, timer_frames, timer_flag, back, up = -100, None, 0, False, False, True
         if self.push:
             push = pygame.sprite.Sprite()
             create_sprite(push, "mat_4.png", self.size[0] // 2 - 200, o, menu_sprites)
@@ -140,8 +205,13 @@ class Menu:
                 else:
                     if not timer_flag:
                         timer_flag = True
-                        pygame.time.set_timer(timer, 3000)
+                        timer_frames = self.fps * 3
                         pygame.mixer.Sound(self.sound_achievement).play()
+
+                if timer_frames > 0:
+                    timer_frames -= 1
+                    if timer_frames == 0:
+                        back, up = True, False
 
                 if back and o - 5 >= -100:
                     o -= 5
@@ -244,10 +314,6 @@ class Menu:
 
                         elif event.key in (pygame.K_ESCAPE, pygame.K_q):
                             terminate()
-
-                    elif event.type == timer:
-                        back, up = True, False
-                        pygame.time.set_timer(timer, 0)
             except pygame.error:
                 terminate()
 
@@ -277,6 +343,7 @@ class Menu:
 
             pygame.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)
 
     def set_n(self, n):
         """Поставить элемент"""
@@ -299,7 +366,7 @@ class Statistic:
         self.screen, self.fps, self.size = screen, fps, tuple(
             map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
 
-    def menu(self):
+    async def menu(self):
         """Меню статистики"""
         fon, s = add_fon(get_values(self.path_config, "theme")[0], self.size), pygame.mixer.Sound(
             self.click)
@@ -357,6 +424,7 @@ class Statistic:
 
             pygame.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)
 
 
 class Instruction:
@@ -373,7 +441,7 @@ class Instruction:
         self.screen, self.fps, self.size = screen, fps, tuple(
             map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
 
-    def menu(self):
+    async def menu(self):
         """Меню обучения"""
         fon, s, text = pygame.transform.scale(load_image("fon_6.png"),
                                               self.size), pygame.mixer.Sound(
@@ -419,3 +487,4 @@ class Instruction:
 
             pygame.display.flip()
             clock.tick(self.fps)
+            await asyncio.sleep(0)

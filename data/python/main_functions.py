@@ -7,6 +7,8 @@ import json
 import sys
 import os
 
+from .platform_compat import IS_WEB
+
 
 def terminate():
     """Стандартная функция для безопасного выхода"""
@@ -162,7 +164,12 @@ def create_window(path):
 
     size, screen = tuple(map(int, screensize.split("x"))), None
 
-    if screenmode == "window":
+    if IS_WEB:
+        # В браузере холст всегда один и масштабируется средствами страницы,
+        # поэтому режимы окна (рамка/полный экран) смысла не имеют.
+        screen = pygame.display.set_mode(size)
+
+    elif screenmode == "window":
         screen = pygame.display.set_mode(size)  # создаём окно
         pygame.display.set_caption("Sea Battle")  # ставим заголовок
 
