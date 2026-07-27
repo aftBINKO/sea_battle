@@ -5,7 +5,7 @@ import sqlite3
 import pygame
 
 from .main_functions import terminate, create_sprite, put_sprite, format_xp, get_values, \
-    get_values_sqlite, add_fon, load_image, extract_files, custom_font
+    get_values_sqlite, add_fon, load_image, extract_files, custom_font, get_font
 
 try:  # для воспроизведения заставки по кадрам; в браузере OpenCV недоступен
     from cv2 import VideoCapture
@@ -84,10 +84,10 @@ class Menu:
         logo = pygame.transform.scale(load_image("aft_games.png"), (200, 200))
         logo_rect = logo.get_rect(center=(self.size[0] // 2, self.size[1] // 2 - 50))
 
-        title = pygame.font.Font(self.font_1, 90).render("Sea Battle", True, (255, 255, 255))
+        title = get_font(self.font_1, 90).render("Sea Battle", True, (255, 255, 255))
         title_rect = title.get_rect(center=(self.size[0] // 2, self.size[1] // 2 + 120))
 
-        hint = pygame.font.Font(self.font_2, 25).render(
+        hint = get_font(self.font_2, 25).render(
             "нажмите, чтобы продолжить", True, (192, 192, 192))
         hint_rect = hint.get_rect(center=(self.size[0] // 2, self.size[1] - 60))
 
@@ -324,20 +324,20 @@ class Menu:
             y = 0
             for line in text:
                 self.screen.blit(
-                    pygame.font.Font(self.font_1, 50).render(line, True, (255, 255, 255)), (0, y))
+                    get_font(self.font_1, 50).render(line, True, (255, 255, 255)), (0, y))
                 y += 50
             for j in text_menu:
                 self.screen.blit(
-                    pygame.font.Font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
+                    get_font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
 
-            # text = pygame.font.Font(self.font_1, 50).render(self.nickname, True, (255, 255, 255))
+            # text = get_font(self.font_1, 50).render(self.nickname, True, (255, 255, 255))
             # text_rect = text.get_rect()
             # self.screen.blit(text, (self.size[0] - tuple(text_rect)[2], 0))
 
             if self.push:
                 for line in [("Получены награды", 40, o + 25),
                              ('Загляните в "Достижения"', 20, o + 65)]:
-                    text = pygame.font.Font(self.font_2, line[1]).render(line[0], True,
+                    text = get_font(self.font_2, line[1]).render(line[0], True,
                                                                          (255, 255, 255))
                     self.screen.blit(text, text.get_rect(center=(self.size[0] // 2, line[2])))
 
@@ -419,7 +419,7 @@ class Statistic:
                      (255, 255, 255), 100, 550, 50, 2]]
             for j in text:
                 self.screen.blit(
-                    pygame.font.Font(custom_font(j[5]), j[4]).render(
+                    get_font(custom_font(j[5]), j[4]).render(
                         j[0], True, j[1]), (j[2], j[3]))
 
             pygame.display.flip()
@@ -483,7 +483,7 @@ class Instruction:
 
             for j in text:
                 self.screen.blit(
-                    pygame.font.Font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
+                    get_font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
 
             pygame.display.flip()
             clock.tick(self.fps)

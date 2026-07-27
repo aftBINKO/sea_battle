@@ -7,7 +7,7 @@ import pygame.sprite
 import pygame.transform
 import os
 
-from .main_functions import create_sprite, get_values, terminate
+from .main_functions import create_sprite, get_values, terminate, get_font
 
 #: На сколько пикселей можно увести палец, чтобы касание всё ещё считалось
 #: нажатием, а не перетаскиванием.
@@ -269,7 +269,7 @@ class Customization:
         self.screensize = tuple(
             map(int, (get_values(os.path.join(path, "config.json"), "screensize")[0].split("x"))))
         self.co = int(display_width * 0.02)
-        self.font = pg.font.Font(self.font_2, int(self.size * 0.8))
+        self.font = get_font(self.font_2, int(self.size * 0.8))
 
         self.map_indent_top = 50
         self.map_indent_left = 50
@@ -308,7 +308,7 @@ class Customization:
         text = self.font.render("Корабли:", True, self.t[1])
         self.sc.blit(text, (self.x_ship, self.y_ship))
 
-        font = pg.font.Font(self.font_2, int(self.size * 0.4))
+        font = get_font(self.font_2, int(self.size * 0.4))
         text = font.render("Нажмите на корабль (или пробел), чтобы повернуть", True, self.t[1])
         self.sc.blit(text, (self.x_ship - 30, int(display_height * 0.69)))
 

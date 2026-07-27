@@ -1,7 +1,7 @@
 import asyncio
 
 from .main_functions import terminate, load_image, create_sprite, get_values, extract_files, \
-    add_fon, set_values, custom_font
+    add_fon, set_values, custom_font, get_font
 
 import pygame
 import os
@@ -178,6 +178,9 @@ class Settings:
         create_sprite(new_game, "new_game.png", 525, self.size[1] - 175,
                       settings_sprites)
 
+        # какая кнопка опасной зоны ждёт второго касания и сколько кадров ещё ждёт
+        armed, armed_frames = None, 0
+
         while True:
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
@@ -185,6 +188,10 @@ class Settings:
 
                 elif event.type == pygame.MOUSEBUTTONDOWN:
                     if event.button == 1:
+                        # Любое касание снимает взвод опасной зоны; ниже он
+                        # выставится заново, если попали в ту же кнопку.
+                        was_armed, armed, armed_frames = armed, None, 0
+
                         if x.rect.collidepoint(event.pos):
                             pygame.mixer.Sound(self.click).play()
                             return
@@ -285,6 +292,24 @@ class Settings:
                             pygame.mixer.Sound(self.enter).play()
                             return self.apply()
 
+                        # Опасная зона срабатывала только по правой кнопке
+                        # мыши, которой на телефоне нет. Двойное касание —
+                        # такая же преграда от случайного нажатия.
+                        elif recovery_settings.rect.collidepoint(event.pos):
+                            pygame.mixer.Sound(self.click).play()
+                            if was_armed == "recovery":
+                                extract_files(self.package, self.path, "config.json")
+                                terminate()
+                            armed, armed_frames = "recovery", self.fps
+
+                        elif new_game.rect.collidepoint(event.pos):
+                            pygame.mixer.Sound(self.click).play()
+                            if was_armed == "new_game":
+                                extract_files(self.package, self.path,
+                                              "statistic.json", "achievements.sqlite")
+                                terminate()
+                            armed, armed_frames = "new_game", self.fps
+
                     elif event.button == 3:
                         result, values = False, None
                         if recovery_settings.rect.collidepoint(event.pos):
@@ -308,9 +333,22 @@ class Settings:
                         pygame.mixer.Sound(self.enter).play()
                         return self.apply()
 
+            if armed_frames > 0:
+                armed_frames -= 1
+                if armed_frames == 0:
+                    armed = None  # передумали — второе касание не засчитываем
+
             self.screen.blit(fon, (0, 0))
 
             settings_sprites.draw(self.screen)
+
+            # Подсказка вместо запечённого в картинку "нажмите ПКМ"
+            if armed:
+                hint, hint_color = "Коснитесь ещё раз, чтобы подтвердить", (255, 255, 0)
+            else:
+                hint, hint_color = "Коснитесь кнопки дважды для подтверждения", (255, 80, 80)
+            self.screen.blit(get_font(custom_font(2), 18).render(hint, True, hint_color),
+                             (120, self.size[1] - 210))
 
             for i in [["Настройки", (255, 255, 255), 50, 50, 50, 1],
                       [f"Версия конфигурационного файла: \
@@ -327,7 +365,7 @@ class Settings:
                        2], ["Тема: ", (255, 255, 255), 100, 405, 50, 1],
                       [self.values_theme[self.value_theme], (255, 255, 255), 500, 400, 50, 2]]:
                 self.screen.blit(
-                    pygame.font.Font(custom_font(i[5]), i[4]).render(i[0], True, i[1]), (i[2], i[3]))
+                    get_font(custom_font(i[5]), i[4]).render(i[0], True, i[1]), (i[2], i[3]))
 
             pygame.display.flip()
             clock.tick(self.fps)
@@ -455,13 +493,13 @@ class About:
                         count += 1
                     else:
                         break
-                text = pygame.font.Font(self.font_2, c * count).render(
+                text = get_font(self.font_2, c * count).render(
                     line.lstrip("#" * (count - 1) + " "), True, (255, 255, 255))
                 self.screen.blit(text, text.get_rect(center=(self.size[0] // 2, y)))
                 y += c
 
             self.screen.blit(
-                pygame.font.Font(self.font_1, 50).render(
+                get_font(self.font_1, 50).render(
                     "Разработчики", True, (255, 255, 255)), (50, 50))
 
             pygame.display.flip()

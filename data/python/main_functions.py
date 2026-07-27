@@ -10,15 +10,147 @@ import os
 from .platform_compat import IS_WEB
 
 
+#: Насколько можно увести палец, чтобы касание всё ещё считалось нажатием
+TAP_SLOP = 12
+
+
+class DragScroll:
+    """Прокрутка списков протяжкой пальца.
+
+    Списки листались только колесом мыши и стрелками, а на телефоне нет ни
+    того, ни другого. Класс превращает движение прижатого пальца в смещение
+    содержимого в пикселях.
+    """
+
+    def __init__(self, slop=TAP_SLOP, friction=0.9):
+        self.slop = slop
+        self.friction = friction
+        self.pressed = False
+        self.last_y = 0
+        self.moved = 0
+        self.velocity = 0.0
+
+    def handle(self, event):
+        """Обработать событие и вернуть сдвиг содержимого по вертикали"""
+        if event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+            self.pressed = True
+            self.last_y = event.pos[1]
+            self.moved = 0
+            self.velocity = 0.0  # палец опустили — инерцию гасим
+
+        elif event.type == pygame.MOUSEMOTION and self.pressed:
+            delta = event.pos[1] - self.last_y
+            self.last_y = event.pos[1]
+            self.moved += abs(delta)
+            # сглаживаем: одиночные события дрожат
+            self.velocity = self.velocity * 0.6 + delta * 0.4
+            return delta
+
+        elif event.type == pygame.MOUSEBUTTONUP:
+            self.pressed = False
+
+        return 0
+
+    def momentum(self):
+        """Докрутка по инерции после того, как палец отпустили.
+
+        Вызывается раз за кадр. Без неё список останавливается ровно там,
+        где оторвали палец, и это ощущается мёртвым.
+        """
+        if self.pressed or abs(self.velocity) < 0.5:
+            self.velocity = 0.0
+            return 0
+
+        self.velocity *= self.friction
+        return self.velocity
+
+    def stop(self):
+        """Погасить инерцию — например, когда упёрлись в край списка"""
+        self.velocity = 0.0
+
+    def is_tap(self):
+        """Было ли это касанием, а не протяжкой"""
+        return self.moved <= self.slop
+
+
 def terminate():
     """Стандартная функция для безопасного выхода"""
     pygame.quit()
     sys.exit()
 
 
+#: Кэши: экраны перерисовываются целиком каждый кадр, и без них достижения
+#: успевали за кадр прочитать с диска 90 картинок и заново разобрать 242 ttf.
+_image_cache = {}
+_font_cache = {}
+
+
 def load_image(name):
     """Стандартная функция для импорта изображения"""
-    return pygame.image.load(os.path.join("data", os.path.join("img", name)))
+    image = _image_cache.get(name)
+    if image is not None:
+        return image
+
+    image = pygame.image.load(os.path.join("data", os.path.join("img", name)))
+
+    # Без convert_alpha() каждый блит пересчитывает формат пикселей заново,
+    # и полноэкранный фон один съедал больше половины кадра.
+    if pygame.display.get_surface() is not None:
+        image = image.convert_alpha()
+        _image_cache[name] = image  # кэшируем только уже готовое к выводу
+
+    return image
+
+
+def get_font(path, size):
+    """Шрифт из кэша: pygame.font.Font заново читает ttf при каждом вызове"""
+    key = (path, size)
+    font = _font_cache.get(key)
+    if font is None:
+        font = pygame.font.Font(path, size)
+        _font_cache[key] = font
+    return font
+
+
+_text_cache = {}
+
+
+def render_text(path, size, text, color, antialias=True):
+    """Готовая надпись из кэша.
+
+    Шрифт кэшируется отдельно, но render() всё равно растеризует строку
+    заново на каждом кадре, а надписи в списках не меняются.
+    """
+    key = (path, size, text, tuple(color))
+    surface = _text_cache.get(key)
+    if surface is None:
+        if len(_text_cache) > 512:  # страховка от бесконечного роста
+            _text_cache.clear()
+        surface = get_font(path, size).render(text, antialias, color)
+        _text_cache[key] = surface
+    return surface
+
+
+def draw_scrollbar(screen, x, top, height, progress, thumb_ratio, width=12):
+    """Полоска прокрутки у края экрана.
+
+    На телефоне иначе никак не понять, что список вообще листается:
+    ни колеса, ни полосы браузера тут нет. Фон под полоской — пёстрая
+    картинка кабины, поэтому нужен контраст, а не аккуратный серый.
+    """
+    if thumb_ratio >= 1:
+        return  # листать нечего
+
+    radius = width // 2
+    pygame.draw.rect(screen, (20, 20, 20), (x, top, width, height), border_radius=radius)
+
+    thumb_height = max(40, int(height * thumb_ratio))
+    thumb_y = top + int((height - thumb_height) * min(1.0, max(0.0, progress)))
+    pygame.draw.rect(screen, (245, 245, 245), (x, thumb_y, width, thumb_height),
+                     border_radius=radius)
+    # тёмный кант, чтобы бегунок не сливался со светлыми участками фона
+    pygame.draw.rect(screen, (20, 20, 20), (x, thumb_y, width, thumb_height), 2,
+                     border_radius=radius)
 
 
 def put_sprite(sprite, x, y):

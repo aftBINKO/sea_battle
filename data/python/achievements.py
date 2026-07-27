@@ -6,7 +6,7 @@ import os
 from datetime import datetime, date
 
 from .main_functions import terminate, load_image, create_sprite, set_statistic, get_values, \
-    custom_font
+    custom_font, DragScroll, get_font, draw_scrollbar, render_text
 
 
 class Achievements:
@@ -36,6 +36,10 @@ class Achievements:
                 pass
             self.achievements = sorted(sorted(s, key=lambda x: int(x[3]), reverse=True),
                                        key=lambda x: float(x[4]), reverse=True)
+
+            # Названия титулов читаем один раз. Раньше запрос уходил в базу
+            # для каждого достижения на каждом кадре — из-за этого список дёргался.
+            self.title_names = dict(cur.execute("""SELECT id, name FROM titles""").fetchall())
 
     async def menu(self):
         """Меню достижений"""
@@ -72,9 +76,17 @@ class Achievements:
         x = pygame.sprite.Sprite()
         create_sprite(x, "x.png", self.size[0] - 100, 50, menu_sprites)
 
-        a, f = 150, 0
+        # Прокрутка теперь в пикселях, а не по шагам: иначе её не привязать
+        # к движению пальца. Границы те же, что были у пошагового варианта.
+        step, visible = 175, (2 if self.size[1] == 768 else 3)
+        a_max = 150
+        a_min = a_max - step * max(0, len(self.achievements) - visible - 1)
+
+        a, scroll = a_max, DragScroll()
         while True:
             for event in pygame.event.get():
+                a = max(a_min, min(a_max, a + scroll.handle(event)))
+
                 if event.type == pygame.QUIT:
                     terminate()
                 elif event.type == pygame.MOUSEBUTTONDOWN:
@@ -86,21 +98,24 @@ class Achievements:
                             pygame.mixer.Sound(self.click).play()
                             return "titles"
                     elif event.button == 4:
-                        if f - 1 >= 0:
-                            a, f = a + 175, f - 1
+                        a = min(a_max, a + step)
                     elif event.button == 5:
-                        if f + 1 < len(self.achievements) - (2 if self.size[1] == 768 else 3):
-                            a, f = a - 175, f + 1
+                        a = max(a_min, a - step)
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_UP:
-                        if f - 1 >= 0:
-                            a, f = a + 175, f - 1
+                        a = min(a_max, a + step)
                     elif event.key == pygame.K_DOWN:
-                        if f + 1 < len(self.achievements) - (2 if self.size[1] == 768 else 3):
-                            a, f = a - 175, f + 1
+                        a = max(a_min, a - step)
                     elif event.key == pygame.K_ESCAPE:
                         pygame.mixer.Sound(self.click).play()
                         return
+
+            glide = scroll.momentum()
+            if glide:
+                slid = max(a_min, min(a_max, a + glide))
+                if slid == a:  # упёрлись в край — инерцию гасим
+                    scroll.stop()
+                a = slid
 
             self.screen.blit(fon, (0, 0))
 
@@ -109,6 +124,12 @@ class Achievements:
                 [f"{completed}%", (0, 0, 0), 625,
                  self.size[1] - 100, 25, 1]], []
             for i, achievement in enumerate(self.achievements, start=1):
+                # Строки за пределами экрана всё равно не видно, а их сборка
+                # стоила три загрузки картинки и десяток отрисовок текста.
+                if not -175 < y < self.size[1]:
+                    y += 175
+                    continue
+
                 mat = pygame.sprite.Sprite()
                 create_sprite(mat, f"mat_{str(achievement[4]).split('.')[0]}_{self.size[1]}.png", 50,
                               y, achievement_sprites)
@@ -139,27 +160,29 @@ class Achievements:
                                            1000 if self.size[1] == 768 else 1100,
                                            y + 100, 25, 2]])
                 if achievement[8] is not None:
-                    with sqlite3.connect(self.path_achievements) as con:
-                        cur = con.cursor()
-                        text_achievements.append([cur.execute(f"""SELECT name FROM titles
-WHERE id = {achievement[8]}""").fetchone()[0], (255, 255, 0),
-                                                  1150 if self.size[1] == 768 else 1500, y + 100, 25,
-                                                  1])
+                    text_achievements.append([self.title_names[achievement[8]], (255, 255, 0),
+                                              1150 if self.size[1] == 768 else 1500, y + 100, 25,
+                                              1])
                 y += 175
 
             achievement_sprites.draw(self.screen)
 
             for j in text_achievements:
                 self.screen.blit(
-                    pygame.font.Font(custom_font(j[5]), j[4]).render(
-                        j[0], True, j[1]), (j[2], j[3]))
+                    render_text(custom_font(j[5]), j[4], j[0], j[1]), (j[2], j[3]))
 
             menu_sprites.draw(self.screen)
 
             for j in text:
                 self.screen.blit(
-                    pygame.font.Font(custom_font(j[5]), j[4]).render(
-                        j[0], True, j[1]), (j[2], j[3]))
+                    render_text(custom_font(j[5]), j[4], j[0], j[1]), (j[2], j[3]))
+
+            bar_top = 150
+            bar_height = self.size[1] - bar_top - (100 if self.size[1] == 768 else 250)
+            draw_scrollbar(
+                self.screen, self.size[0] - 30, bar_top, bar_height,
+                0 if a_max == a_min else (a_max - a) / (a_max - a_min),
+                visible / len(self.achievements))
 
             pygame.display.flip()
             clock.tick(self.fps)
@@ -298,7 +321,7 @@ class Titles:
 
             for j in text:
                 self.screen.blit(
-                    pygame.font.Font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
+                    render_text(custom_font(j[5]), j[4], j[0], j[1]), (j[2], j[3]))
 
             pygame.display.flip()
             clock.tick(self.fps)

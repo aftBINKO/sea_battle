@@ -1,5 +1,5 @@
 from .main_functions import terminate, create_sprite, get_values, load_image, set_statistic, \
-    add_fon, custom_font
+    add_fon, custom_font, DragScroll, get_font, draw_scrollbar
 from .custom_map import Customization
 import asyncio
 import pygame as pg
@@ -310,7 +310,7 @@ class GameOver:
              100, 100, 1],
             [f"Счёт:", self.size[1] // 2 - 25, 25, 2], [
                 f"Награда: {self.xp} XP", self.size[1] // 2 + 25, 25, 2]]:
-            text = pg.font.Font(custom_font(line[3]), line[2]).render(
+            text = get_font(custom_font(line[3]), line[2]).render(
                 line[0], True, (255, 255, 255))
             texts.append([text, text.get_rect(center=(self.size[0] // 2, line[1]))])
 
@@ -337,7 +337,7 @@ class GameOver:
             if n < score:
                 n += 1
             line = [str(n), self.size[1] // 2, 25, 2]
-            text = pg.font.Font(custom_font(line[3]), line[2]).render(
+            text = get_font(custom_font(line[3]), line[2]).render(
                 line[0], True, (255, 255, 255))
             text = [text, text.get_rect(center=(self.size[0] // 2, line[1]))]
             self.screen.blit(text[0], text[1])
@@ -374,6 +374,13 @@ class PlayWithBot:
         all_remove()
         global display_width, display_height, list_pos_ship_bot, list_pos_ship_player
 
+        # Эти картинки грузятся при импорте модуля, когда окна ещё нет и
+        # convert_alpha() недоступен. Перечитываем их уже с готовым экраном,
+        # иначе каждая из двух сотен клеток блитится через конвертацию формата.
+        Cell.image_popal = load_image("popal.png")
+        Cell.image_ne_popal = load_image("nepopal.png")
+        Image_popal.image_popal = load_image("bot_popal.png")
+
         customization = Customization(self.sc, self.fps, self.path, self.theme)
         try:
             await customization.map_customization()
@@ -398,7 +405,7 @@ class PlayWithBot:
             map(int, (get_values(os.path.join(self.path, "config.json"),
                                  "screensize")[0].split("x"))))
         self.co = int(display_width * 0.02)
-        self.font = pg.font.Font(self.font_2, int(self.size * 0.5))
+        self.font = get_font(self.font_2, int(self.size * 0.5))
 
         self.map_indent_top = 50
         self.map_indent_left = 50
@@ -499,7 +506,7 @@ class PlayWithBot:
         pg.draw.line(self.sc, self.t[1], (int(display_width * 0.5), 0),
                      (int(display_width * 0.5), display_height), 4)
 
-        font = pg.font.Font(self.font_1, self.size)
+        font = get_font(self.font_1, self.size)
 
         text = font.render(self.name, True, self.t[1])
         self.sc.blit(text, (display_width // 4, 10))
@@ -578,9 +585,24 @@ class Play:
         x = pg.sprite.Sprite()
         create_sprite(x, "x.png", self.size[0] - 100, 50, menu_sprites)
 
-        q, n, mission_file = 255 if self.size[1] == 768 else 360, 0, os.path.join(
+        mission_file = os.path.join(
             os.path.join("data", "missions"),
             "mission_" + get_values(self.path_statistic, "mission")[0] + ".json")
+
+        # Прокрутка текста задания — в пикселях, чтобы её можно было привязать
+        # к протяжке пальцем. Границы прежние, шаг колеса тоже.
+        q_max, step, scroll = 255 if self.size[1] == 768 else 360, 25, DragScroll()
+        q = q_max
+
+        # Прозрачное окно в mat_5, сквозь которое виден текст. Полоску ставим
+        # вплотную справа от него: у края экрана она была оторвана от того,
+        # чем управляет, а внутрь не помещается — длинные строки доходят до
+        # самой кромки и обрезаются ею.
+        if self.size[1] == 768:
+            window_right, window_top, window_bottom = 676, 256, 696
+        else:
+            window_right, window_top, window_bottom = 956, 356, 980
+
         mission = get_values(mission_file, "mission")[0]
 
         play, surrender = None, None
@@ -632,10 +654,15 @@ class Play:
 
             for j in texts:
                 self.screen.blit(
-                    pg.font.Font(self.font_2, j[4]).render(j[0], True, j[1]),
+                    get_font(self.font_2, j[4]).render(j[0], True, j[1]),
                     (j[2], j[3]))
 
+            # нижняя граница зависит от того, на сколько строк разбился текст
+            q_min = q_max - step * max(0, len(texts) - 18)
+
             for event in pg.event.get():
+                q = max(q_min, min(q_max, q + scroll.handle(event)))
+
                 if event.type == pg.QUIT:
                     terminate()
 
@@ -660,12 +687,10 @@ class Play:
                             pass
 
                     elif event.button == 4:
-                        if n - 1 >= 0:
-                            q, n = q + 25, n - 1
+                        q = min(q_max, q + step)
 
                     elif event.button == 5:
-                        if n + 1 < len(texts) - 17:
-                            q, n = q - 25, n + 1
+                        q = max(q_min, q - step)
 
                 elif event.type == pg.KEYDOWN:
                     if event.key == pg.K_ESCAPE:
@@ -681,24 +706,34 @@ class Play:
                         return self.surrender()
 
                     elif event.key == pg.K_UP:
-                        if n - 1 >= 0:
-                            q, n = q + 25, n - 1
+                        q = min(q_max, q + step)
 
                     elif event.key == pg.K_DOWN:
-                        if n + 1 < len(texts) - 17:
-                            q, n = q - 25, n + 1
+                        q = max(q_min, q - step)
+
+            glide = scroll.momentum()
+            if glide:
+                slid = max(q_min, min(q_max, q + glide))
+                if slid == q:  # упёрлись в край — инерцию гасим
+                    scroll.stop()
+                q = slid
 
             menu_sprites.draw(self.screen)
 
             if get_values(mission_file, "mode")[0] != "text":
                 for j in t:
                     self.screen.blit(
-                        pg.font.Font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
+                        get_font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
 
             self.screen.blit(
-                pg.font.Font(self.font_1, 50).render(
+                get_font(self.font_1, 50).render(
                     get_values(mission_file, "name")[0], True, (255, 255, 255)),
                 (70 if self.size[1] == 768 else 80, 200 if self.size[1] == 768 else 300))
+
+            draw_scrollbar(
+                self.screen, window_right + 8, window_top, window_bottom - window_top,
+                0 if q_max == q_min else (q_max - q) / (q_max - q_min),
+                18 / max(1, len(texts)))
 
             pg.display.flip()
             clock.tick(self.fps)
@@ -717,7 +752,7 @@ class Board:
 
         self.co = int(display_width * 0.02)
         self.size = int(display_width * 0.035)
-        self.font = pg.font.Font(None, int(self.size * 0.8))
+        self.font = get_font(None, int(self.size * 0.8))
         self.clock = pg.time.Clock()
 
     def map_draw(self, x, y):
