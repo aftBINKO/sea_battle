@@ -2,6 +2,7 @@ import asyncio
 
 from .main_functions import terminate, load_image, create_sprite, get_values, extract_files, \
     add_fon, set_values, custom_font, get_font
+from .platform_compat import persist, reload_page
 
 import pygame
 import os
@@ -40,6 +41,16 @@ class Settings:
         self.value_theme = self.values_theme.index(
             get_values(self.path_config, "theme")[0])
         self.update = pygame.USEREVENT + 1, 1
+
+    def restart(self):
+        """Завершить игру после сброса из опасной зоны"""
+        # Без этого в браузере сброс бесполезен: файлы перезаписаны только в
+        # памяти, а при следующем запуске restore() вернёт из localStorage
+        # ровно те сохранения, которые мы только что стёрли.
+        persist(self.path)
+
+        reload_page()  # в браузере игру заново не запустишь — перезагружаем сами
+        terminate()
 
     def apply(self):
         """Действие "Применить\""""
@@ -299,7 +310,7 @@ class Settings:
                             pygame.mixer.Sound(self.click).play()
                             if was_armed == "recovery":
                                 extract_files(self.package, self.path, "config.json")
-                                terminate()
+                                self.restart()
                             armed, armed_frames = "recovery", self.fps
 
                         elif new_game.rect.collidepoint(event.pos):
@@ -307,7 +318,7 @@ class Settings:
                             if was_armed == "new_game":
                                 extract_files(self.package, self.path,
                                               "statistic.json", "achievements.sqlite")
-                                terminate()
+                                self.restart()
                             armed, armed_frames = "new_game", self.fps
 
                     elif event.button == 3:
@@ -322,7 +333,7 @@ class Settings:
 
                         if result:
                             extract_files(self.package, self.path, *values)
-                            terminate()
+                            self.restart()
 
                 elif event.type == pygame.KEYDOWN:
                     if event.key == pygame.K_ESCAPE:
@@ -342,13 +353,19 @@ class Settings:
 
             settings_sprites.draw(self.screen)
 
-            # Подсказка вместо запечённого в картинку "нажмите ПКМ"
+            # Подсказка на месте стёртой из danger_zone.png строки про ПКМ
             if armed:
                 hint, hint_color = "Коснитесь ещё раз, чтобы подтвердить", (255, 255, 0)
             else:
-                hint, hint_color = "Коснитесь кнопки дважды для подтверждения", (255, 80, 80)
-            self.screen.blit(get_font(custom_font(2), 18).render(hint, True, hint_color),
-                             (120, self.size[1] - 210))
+                hint, hint_color = ("Коснитесь кнопки дважды или нажмите ПКМ",
+                                    (255, 80, 80))
+
+            for line, color, offset in (
+                    ("Действие необратимо, игра перезапустится", (255, 80, 80), 55),
+                    (hint, hint_color, 80)):
+                surface = get_font(custom_font(2), 17).render(line, True, color)
+                self.screen.blit(surface, surface.get_rect(
+                    center=(500, self.size[1] - 300 + offset)))
 
             for i in [["Настройки", (255, 255, 255), 50, 50, 50, 1],
                       [f"Версия конфигурационного файла: \

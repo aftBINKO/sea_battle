@@ -58,6 +58,24 @@ def web_log(*args):
         print(message)
 
 
+def reload_page():
+    """Перезагрузить страницу.
+
+    Сброс прогресса завершает игру, и на десктопе её просто запускают заново.
+    В браузере запускать нечего — перезагружаем страницу сами.
+    """
+    if not IS_WEB:
+        return False
+    try:
+        import platform
+
+        platform.window.location.reload()
+        return True
+    except Exception as error:
+        web_log(f"reload failed: {error!r}")
+        return False
+
+
 def _storage():
     """localStorage браузера, либо None вне браузера"""
     if not IS_WEB:
