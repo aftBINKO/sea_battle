@@ -7,6 +7,7 @@ import pygame
 from .main_functions import terminate, create_sprite, put_sprite, format_xp, get_values, \
     get_values_sqlite, add_fon, load_image, extract_files, custom_font, get_font, screen_size, \
     stretch_to
+from .platform_compat import WEB_DEMO
 
 try:  # для воспроизведения заставки по кадрам; в браузере OpenCV недоступен
     from cv2 import VideoCapture
@@ -125,7 +126,10 @@ class Menu:
     LABEL_WIDTH, LABEL_PITCH, LABEL_HEIGHT = 250, 300, 50
 
     def _tiles(self):
-        """Плитки меню: (индекс подписи в ленте, что вернуть при нажатии).
+        """Плитки меню: (подпись, что вернуть при нажатии).
+
+        Подпись — либо номер в ленте buttons.png, либо готовая строка, если
+        такой картинки в ленте нет.
 
         Недоступные режимы просто не показываем — в карусели они занимали
         место и молча ничего не делали при выборе.
@@ -135,8 +139,19 @@ class Menu:
         items = [(0, "Play")]
         if unlocked:
             items += [(1, "Play_With_Bot"), (2, "Farm")]
-        items += [(3, "Settings"), (4, "Achievements"), (5, "Statistic"),
-                  (6, "Instruction"), (7, "Exit")]
+        items += [(3, "Settings")]
+
+        if not WEB_DEMO:
+            items += [(4, "Achievements")]
+
+        items += [(5, "Statistic"), (6, "Instruction")]
+
+        if WEB_DEMO:
+            # В демо это визитка студии и путь к полной версии, поэтому
+            # они в меню, а не спрятаны в настройках.
+            items += [("Разработчики", "Developers"), ("Полная версия", "FullVersion")]
+
+        items += [(7, "Exit")]
         return items
 
     async def menu(self):
@@ -184,14 +199,28 @@ class Menu:
         header.fill((12, 18, 28, 150))
 
         tiles = []  # (прямоугольник, готовая подпись, что вернуть)
-        for i, (label_index, action) in enumerate(items):
+        for i, (caption, action) in enumerate(items):
             rect = pygame.Rect(
                 grid_x + (i % columns) * (tile_w + gap_x),
                 grid_y + (i // columns) * (tile_h + gap_y), tile_w, tile_h)
-            label = pygame.transform.scale(
-                strip.subsurface(pygame.Rect(label_index * self.LABEL_PITCH, 0,
-                                             self.LABEL_WIDTH, self.LABEL_HEIGHT)),
-                (tile_w, tile_h))
+
+            if isinstance(caption, int):
+                label = pygame.transform.scale(
+                    strip.subsurface(pygame.Rect(caption * self.LABEL_PITCH, 0,
+                                                 self.LABEL_WIDTH, self.LABEL_HEIGHT)),
+                    (tile_w, tile_h))
+            else:
+                # Такой подписи в ленте нет — рисуем текстом. Кегль подбираем
+                # под ширину плитки, чтобы буквы были вровень с картинками.
+                label = pygame.Surface((tile_w, tile_h), pygame.SRCALPHA)
+                font_size = int(tile_h * 0.75)
+                while font_size > 20 and get_font(
+                        self.font_1, font_size).size(caption)[0] > tile_w - 40:
+                    font_size -= 2
+
+                text = get_font(self.font_1, font_size).render(caption, True, (255, 255, 255))
+                label.blit(text, text.get_rect(center=(tile_w // 2, tile_h // 2)))
+
             tiles.append((rect, label, action))
 
         # Подсветка нужна только при управлении с клавиатуры: на телефоне
@@ -375,27 +404,36 @@ class Statistic:
             menu_sprites.draw(self.screen)
 
             xp, t, g, v, d, il, ca, m = get_values(self.path_statistic, a=True)
-            try:
-                t = get_values_sqlite(self.path_achievements, "titles", f"id = {t}", "name")[0][0]
-            except sqlite3.OperationalError:
-                t = "отсутствует"
-            text = [["Статистика", (255, 255, 255), 50, 50, 50, 1],
-                    [f"Всего опыта: {xp} XP", (255, 255, 255), 100, 150, 50, 2],
-                    [f"Уровень: {format_xp(self.path_statistic)[1]}/100", (255, 255, 255), 100, 200,
-                     50, 2], [f"Титул: {t}", (255, 255, 255), 100, 250, 50, 2],
-                    [f"Количество игр: {g}", (255, 255, 255), 100, 300, 50, 2],
-                    [f"Побед: {v}", (255, 255, 255), 100, 350, 50, 2],
-                    [f"Поражений: {d}", (255, 255, 255), 100, 400, 50, 2],
-                    [f"Невозможных уровней выиграно: {il}", (255, 255, 255), 100, 450, 50, 2],
-                    [f"Достижений выполнено: \
-{ca}/{len(get_values_sqlite(self.path_achievements, 'achievements', None, 'id'))}", (255, 255, 255),
-                     100, 500, 50, 2],
-                    [f"Сюжет: {int(((int(m) - 1) / 8) * 100) if m not in ['8a', '8b'] else 100}%",
-                     (255, 255, 255), 100, 550, 50, 2]]
-            for j in text:
-                self.screen.blit(
-                    get_font(custom_font(j[5]), j[4]).render(
-                        j[0], True, j[1]), (j[2], j[3]))
+
+            rows = [f"Всего опыта: {xp} XP",
+                    f"Уровень: {format_xp(self.path_statistic)[1]}/100"]
+
+            if not WEB_DEMO:
+                # Титул выдаётся за достижения, а их в демо нет
+                try:
+                    t = get_values_sqlite(
+                        self.path_achievements, "titles", f"id = {t}", "name")[0][0]
+                except sqlite3.OperationalError:
+                    t = "отсутствует"
+                rows.append(f"Титул: {t}")
+
+            rows += [f"Количество игр: {g}",
+                     f"Побед: {v}",
+                     f"Поражений: {d}",
+                     f"Невозможных уровней выиграно: {il}"]
+
+            if not WEB_DEMO:
+                rows.append(f"Достижений выполнено: {ca}/" + str(len(get_values_sqlite(
+                    self.path_achievements, "achievements", None, "id"))))
+                rows.append(
+                    f"Сюжет: {int(((int(m) - 1) / 8) * 100) if m not in ['8a', '8b'] else 100}%")
+
+            self.screen.blit(get_font(custom_font(1), 50).render(
+                "Статистика", True, (255, 255, 255)), (50, 50))
+
+            for i, line in enumerate(rows):
+                self.screen.blit(get_font(custom_font(2), 50).render(
+                    line, True, (255, 255, 255)), (100, 150 + i * 50))
 
             pygame.display.flip()
             clock.tick(self.fps)
@@ -422,10 +460,25 @@ class Instruction:
             self.click), [["Обучение", (255, 255, 255), 50, 50, 50, 1]]
 
         with open(self.instruction, encoding="utf-8") as f:
-            t, y, c = f.read().split("\n"), 150, 25 if self.size[1] == 768 else 35
-            for line in t:
-                text.append([line, (255, 255, 255), 100, y, c, 2])
-                y += c
+            paragraphs = f.read().split("\n\n")
+
+        if WEB_DEMO:
+            # Обучение не должно рекламировать то, чего в демо нет
+            kept = []
+            for block in paragraphs:
+                if block.startswith(("Достижения:", "Титулы")):
+                    continue
+                if block.startswith('Режим "Сюжет"'):
+                    block = ('Режим "Сюжет": доступен по кнопке "Играть". В демоверсии открыт '
+                             'только пролог,\nостальные миссии, достижения и титулы — '
+                             'в полной версии для компьютера.')
+                kept.append(block)
+            paragraphs = kept
+
+        y, c = 150, 25 if self.size[1] == 768 else 35
+        for line in "\n\n".join(paragraphs).split("\n"):
+            text.append([line, (255, 255, 255), 100, y, c, 2])
+            y += c
 
         clock = pygame.time.Clock()
 

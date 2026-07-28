@@ -6,7 +6,8 @@ from datetime import datetime
 
 from data.python.main_functions import create_window, format_xp, extract_files, get_values, \
     set_statistic, get_values_sqlite
-from data.python.platform_compat import user_data_dir, restore, persist
+from data.python.platform_compat import user_data_dir, restore, persist, WEB_DEMO, \
+    open_url, FULL_VERSION_URL
 from data.python.achievements import Achievements, Titles
 from data.python.menu import Menu, Statistic, Instruction
 from data.python.settings import Settings, About
@@ -44,23 +45,25 @@ async def run():
 
     screen, fps = create_window(path)  # создаём окно
 
-    menu, settings, achievements = Menu(screen, fps, path, None), Settings(
-        screen, fps, path), Achievements(screen, fps, path)
+    # В демо достижений нет, поэтому и объект не нужен
+    menu, settings = Menu(screen, fps, path, None), Settings(screen, fps, path)
+    achievements = None if WEB_DEMO else Achievements(screen, fps, path)
 
     pygame.mouse.set_visible(False)  # погашаем мышь
     await menu.screensaver()  # заставка
     pygame.mouse.set_visible(True)  # показываем мышь
 
     # переменная push означает, получено ли достижение сейчас, чтобы уведомить об этом игрока
-    push = achievements.set_progress(1, 1, True)  # достижение за вход в игру
+    push = None if WEB_DEMO else achievements.set_progress(1, 1, True)
     persist(path)  # иначе награда за вход потеряется, если закрыть вкладку прямо в меню
 
     while True:
         x = menu.get_n()  # сохраним значение x в переменную
 
         # обновляем достижения, меню и настройки
-        menu, settings, achievements = Menu(screen, fps, path, push), Settings(
-            screen, fps, path), Achievements(screen, fps, path)
+        menu, settings = Menu(screen, fps, path, push), Settings(screen, fps, path)
+        if not WEB_DEMO:
+            achievements = Achievements(screen, fps, path)
         push = None  # обнулили
         menu.set_n(x)  # и вставим обратно
 
@@ -133,6 +136,18 @@ by_time_of_day" and 8 <= int(datetime.now().time().strftime("%H")) <= 18),
             while True:
                 if await titles.menu() is None:
                     break
+
+        elif result == "Developers":
+            # в демо вынесено из настроек прямо в меню
+            await About(screen, fps, path_config).menu()
+
+        elif result == "FullVersion":
+            open_url(FULL_VERSION_URL)
+
+        if WEB_DEMO:
+            # достижений в демо нет — считать по ним прогресс нечего
+            persist(path)
+            continue
 
         """Установка прогресса для достижений"""
         m = get_values(path_statistic, "mission")[0]

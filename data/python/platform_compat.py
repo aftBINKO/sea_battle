@@ -58,6 +58,39 @@ def web_log(*args):
         print(message)
 
 
+#: Веб-сборка — демо: сюжет обрывается после пролога, достижений и титулов нет.
+#: Полная версия остаётся на десктопе, поэтому урезаем только браузер.
+WEB_DEMO = IS_WEB
+
+#: Куда ведут кнопка "Скачать" и плитка "Полная версия"
+FULL_VERSION_URL = "https://gamejolt.com/games/sea_battle/790394"
+
+
+def open_url(url):
+    """Открыть ссылку в новой вкладке.
+
+    В браузере модуль webbrowser может отсутствовать или ничего не делать,
+    поэтому там зовём window.open напрямую.
+    """
+    if IS_WEB:
+        try:
+            import platform
+
+            platform.window.open(url, "_blank")
+            return True
+        except Exception as error:
+            web_log(f"open_url failed: {error!r}")
+            return False
+
+    try:
+        import webbrowser
+
+        webbrowser.open(url, new=0)
+        return True
+    except Exception:
+        return False
+
+
 def viewport_aspect():
     """Соотношение сторон окна браузера, либо None вне браузера"""
     if not IS_WEB:

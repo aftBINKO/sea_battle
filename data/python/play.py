@@ -1,5 +1,6 @@
 from .main_functions import terminate, create_sprite, get_values, load_image, set_statistic, \
     add_fon, custom_font, DragScroll, get_font, draw_scrollbar, cell_size, screen_size, stretch_to
+from .platform_compat import WEB_DEMO, open_url, FULL_VERSION_URL
 from .custom_map import Customization
 import asyncio
 import pygame as pg
@@ -570,8 +571,72 @@ class Play:
 
         return "replay"
 
+    async def full_version_wall(self):
+        """Экран «продолжение в полной версии» после пролога"""
+        fon = add_fon(get_values(os.path.join(
+            os.path.dirname(self.path_statistic), "config.json"), "theme")[0], self.size)
+
+        clock, sprites = pg.time.Clock(), pg.sprite.Group()
+
+        panel = f"mat_6_{self.size[1]}.png"
+        mat = pg.sprite.Sprite()
+        create_sprite(mat, panel, 50, 100, sprites, stretch_to(panel, self.size[0] - 100))
+
+        close = pg.sprite.Sprite()
+        create_sprite(close, "x.png", self.size[0] - 100, 50, sprites)
+
+        download = pg.Rect(self.size[0] // 2 - 220, self.size[1] - 240, 440, 70)
+
+        lines = [
+            ("Пролог пройден", 60, 1, (255, 255, 255), 260),
+            ("Дальше — ещё семь миссий, достижения и титулы.", 30, 2, (192, 192, 192), 350),
+            ("Всё это есть в полной версии для компьютера.", 30, 2, (192, 192, 192), 390),
+        ]
+
+        while True:
+            for event in pg.event.get():
+                if event.type == pg.QUIT:
+                    terminate()
+
+                elif event.type == pg.MOUSEBUTTONDOWN and event.button == 1:
+                    if close.rect.collidepoint(event.pos):
+                        pg.mixer.Sound(self.click).play()
+                        return
+                    if download.collidepoint(event.pos):
+                        pg.mixer.Sound(self.enter).play()
+                        open_url(FULL_VERSION_URL)
+
+                elif event.type == pg.KEYDOWN and event.key in (pg.K_ESCAPE, pg.K_RETURN):
+                    pg.mixer.Sound(self.click).play()
+                    return
+
+            self.screen.blit(fon, (0, 0))
+            sprites.draw(self.screen)
+
+            self.screen.blit(get_font(self.font_1, 50).render(
+                "Задания", True, (255, 255, 255)), (50, 50))
+
+            for text, size, font_index, color, y in lines:
+                surface = get_font(custom_font(font_index), size).render(text, True, color)
+                self.screen.blit(surface, surface.get_rect(center=(self.size[0] // 2, y)))
+
+            pg.draw.rect(self.screen, (0, 200, 0), download, border_radius=8)
+            pg.draw.rect(self.screen, (255, 255, 255), download, 3, border_radius=8)
+            label = get_font(self.font_1, 38).render(
+                "Скачать на GameJolt", True, (255, 255, 255))
+            self.screen.blit(label, label.get_rect(center=download.center))
+
+            pg.display.flip()
+            clock.tick(self.fps)
+            await asyncio.sleep(0)
+
     async def menu(self):
         """Меню игры"""
+        mission = get_values(self.path_statistic, "mission")[0]
+
+        # В демо сюжет обрывается сразу после пролога
+        if WEB_DEMO and mission != "1":
+            return await self.full_version_wall()
 
         clock = pg.time.Clock()
 
@@ -585,8 +650,7 @@ class Play:
         create_sprite(x, "x.png", self.size[0] - 100, 50, menu_sprites)
 
         mission_file = os.path.join(
-            os.path.join("data", "missions"),
-            "mission_" + get_values(self.path_statistic, "mission")[0] + ".json")
+            os.path.join("data", "missions"), "mission_" + mission + ".json")
 
         # Прокрутка текста задания — в пикселях, чтобы её можно было привязать
         # к протяжке пальцем. Границы прежние, шаг колеса тоже.

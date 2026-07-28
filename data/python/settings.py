@@ -165,10 +165,12 @@ class Settings:
         # кнопки уходят наверх, освобождая всю полосу под зону; на десктопе
         # строк пять, места нет, и зона остаётся прижатой влево, как в оригинале.
         if IS_WEB:
+            # "Разработчики" в демо переехали в главное меню, поэтому здесь
+            # остаётся одна кнопка и её можно поставить по центру
             zone_x = max(50, (self.size[0] - 800) // 2)
             buttons_y = self.size[1] - 390
-            developers_x = self.size[0] // 2 - 260
-            apply_x = self.size[0] // 2 + 10
+            developers_x = None
+            apply_x = self.size[0] // 2 - 125
         else:
             zone_x = 100
             buttons_y = None
@@ -222,8 +224,9 @@ class Settings:
         # create_sprite(load, "load.png", self.size[0] - 220, 150, settings_sprites)
 
         developers = pygame.sprite.Sprite()
-        create_sprite(developers, "developers.png", developers_x,
-                      buttons_y if buttons_y else self.size[1] - 250, settings_sprites)
+        if developers_x is not None:
+            create_sprite(developers, "developers.png", developers_x,
+                          buttons_y if buttons_y else self.size[1] - 250, settings_sprites)
 
         danger_zone = pygame.sprite.Sprite()
         create_sprite(danger_zone, "danger_zone.png", zone_x, self.size[1] - 300,
@@ -266,7 +269,8 @@ class Settings:
                         #     pygame.mixer.Sound(self.enter).play()
                         #     self.load()
 
-                        elif developers.rect.collidepoint(event.pos):
+                        elif developers_x is not None and developers.rect.collidepoint(
+                                event.pos):
                             pygame.mixer.Sound(self.enter).play()
                             return "developers"
 
@@ -338,12 +342,8 @@ class Settings:
                 self.screen.blit(surface, surface.get_rect(
                     center=(zone_x + 400, self.size[1] - 300 + offset)))
 
-            for i in [["Настройки", (255, 255, 255), 50, 50, 50, 1],
-                      [f"Версия конфигурационного файла: \
-{get_values(self.path_config, 'version')[0]}",
-                       (128, 128, 128), 100, 150, 25, 2]]:
-                self.screen.blit(
-                    get_font(custom_font(i[5]), i[4]).render(i[0], True, i[1]), (i[2], i[3]))
+            self.screen.blit(get_font(custom_font(1), 50).render(
+                "Настройки", True, (255, 255, 255)), (50, 50))
 
             for _, _, value_area, caption, field, values, y in controls:
                 self.screen.blit(
