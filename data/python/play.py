@@ -1,5 +1,5 @@
 from .main_functions import terminate, create_sprite, get_values, load_image, set_statistic, \
-    add_fon, custom_font, DragScroll, get_font, draw_scrollbar
+    add_fon, custom_font, DragScroll, get_font, draw_scrollbar, CELL_RATIO
 from .custom_map import Customization
 import asyncio
 import pygame as pg
@@ -400,7 +400,7 @@ class PlayWithBot:
         display_height = sur.get_height()
 
         self.clock = pg.time.Clock()
-        self.size = int(display_width * 0.035)
+        self.size = int(display_width * CELL_RATIO)
         self.screensize = tuple(
             map(int, (get_values(os.path.join(self.path, "config.json"),
                                  "screensize")[0].split("x"))))
@@ -506,13 +506,15 @@ class PlayWithBot:
         pg.draw.line(self.sc, self.t[1], (int(display_width * 0.5), 0),
                      (int(display_width * 0.5), display_height), 4)
 
-        font = get_font(self.font_1, self.size)
+        # Шрифт подписи завязан на размер клетки: в полный рост он налезает на
+        # строку с цифрами, поэтому берём долю и центруем над своим полем.
+        font = get_font(self.font_1, int(self.size * 0.7))
 
-        text = font.render(self.name, True, self.t[1])
-        self.sc.blit(text, (display_width // 4, 10))
-
-        text = font.render("Противник", True, self.t[1])
-        self.sc.blit(text, (display_width // 2 + 200, 10))
+        half = int(display_width * 0.5)
+        for caption, board_x in ((self.name, x), ("Противник", x + half)):
+            text = font.render(caption, True, self.t[1])
+            self.sc.blit(text, text.get_rect(
+                center=(board_x + self.co + self.size * 5, 28)))
 
     def map_draw_2(self, x, y):
 
@@ -751,7 +753,7 @@ class Board:
         display_height = sur.get_height()
 
         self.co = int(display_width * 0.02)
-        self.size = int(display_width * 0.035)
+        self.size = int(display_width * CELL_RATIO)
         self.font = get_font(None, int(self.size * 0.8))
         self.clock = pg.time.Clock()
 

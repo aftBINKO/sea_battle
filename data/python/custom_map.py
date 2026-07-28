@@ -7,7 +7,7 @@ import pygame.sprite
 import pygame.transform
 import os
 
-from .main_functions import create_sprite, get_values, terminate, get_font
+from .main_functions import create_sprite, get_values, terminate, get_font, CELL_RATIO
 
 #: На сколько пикселей можно увести палец, чтобы касание всё ещё считалось
 #: нажатием, а не перетаскиванием.
@@ -265,7 +265,7 @@ class Customization:
             i.kill()
         up_per()
         self.clock = pg.time.Clock()
-        self.size = int(display_width * 0.035)
+        self.size = int(display_width * CELL_RATIO)
         self.screensize = tuple(
             map(int, (get_values(os.path.join(path, "config.json"), "screensize")[0].split("x"))))
         self.co = int(display_width * 0.02)
@@ -284,13 +284,19 @@ class Customization:
 
         slo = list("АБВГДЕЖЗИК")
 
+        # Подписи центруем в отступе вокруг сетки: со старыми фиксированными
+        # сдвигами они наползали на поле, стоило клетке подрасти.
+        labels = get_font(self.font_2, int(self.size * 0.45))
+
         for i in range(10):
-            text = self.font.render(str(i), True, self.t[1])
-            self.sc.blit(text, (i * self.size + x + 15 + self.co, 3 + y))
+            text = labels.render(str(i), True, self.t[1])
+            self.sc.blit(text, text.get_rect(
+                center=(x + self.co + self.size * i + self.size // 2, y + self.co // 2)))
 
         for i, pp in enumerate(slo):
-            text = self.font.render(pp, True, self.t[1])
-            self.sc.blit(text, (x, i * self.size + y + 10 + self.co))
+            text = labels.render(pp, True, self.t[1])
+            self.sc.blit(text, text.get_rect(
+                center=(x + self.co // 2, y + self.co + self.size * i + self.size // 2)))
 
         for i in range(1, 10):
             pg.draw.line(self.sc, self.t[1], (x + self.co + self.size * i, y + self.co),
@@ -303,8 +309,8 @@ class Customization:
                      4)
 
         pg.draw.rect(self.sc, self.t[1], (self.x_ship - 30, self.y_ship - 10,
-                                          (int(display_width * 0.035)) * 7,
-                                          (int(display_width * 0.035)) * 6), 4)
+                                          (int(display_width * CELL_RATIO)) * 7,
+                                          (int(display_width * CELL_RATIO)) * 6), 4)
         text = self.font.render("Корабли:", True, self.t[1])
         self.sc.blit(text, (self.x_ship, self.y_ship))
 
@@ -382,7 +388,7 @@ class Customization:
         y = int(display_height * 0.25)
         indent_bottom = 10
         indent_right = 10
-        size = int(display_width * 0.035) - 10
+        size = int(display_width * CELL_RATIO) - 10
 
         for i in range(1, 5):
             for g in range(i):

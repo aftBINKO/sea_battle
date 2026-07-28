@@ -42,6 +42,25 @@ class Settings:
             get_values(self.path_config, "theme")[0])
         self.update = pygame.USEREVENT + 1, 1
 
+    def _cycle(self, controls, pos):
+        """Переключить настройку, если попали по её строке.
+
+        Стрелки листают назад и вперёд, нажатие по самому значению — вперёд:
+        так на телефоне не нужно целиться в стрелку.
+        """
+        for back, forward, value_area, _, field, values, _ in controls:
+            if back.collidepoint(pos):
+                step = -1
+            elif forward.collidepoint(pos) or value_area.collidepoint(pos):
+                step = 1
+            else:
+                continue
+
+            setattr(self, field, (getattr(self, field) + step) % len(values))
+            return True
+
+        return False
+
     def restart(self):
         """Завершить игру после сброса из опасной зоны"""
         # Без этого в браузере сброс бесполезен: файлы перезаписаны только в
@@ -143,30 +162,31 @@ class Settings:
         apply = pygame.sprite.Sprite()
         create_sprite(apply, "apply.png", self.size[0] - 350, self.size[1] - 150, settings_sprites)
 
-        left_screensize = pygame.sprite.Sprite()
-        create_sprite(left_screensize, "left_arrow.png", 450, 200, settings_sprites)
-        right_screensize = pygame.sprite.Sprite()
-        create_sprite(right_screensize, "right_arrow.png", 900, 200, settings_sprites)
+        # Строки настроек описаны таблицей: раньше на каждую приходилось по две
+        # почти одинаковых ветки обработки, а зоны нажатия были размером со
+        # стрелку 50x50 — на телефоне это меньше сантиметра.
+        rows = [
+            ("Размер экрана: ", "value_screensize", self.values_screensize),
+            ("Режим экрана: ", "value_screenmode", self.values_screenmode),
+            ("FPS: ", "value_fps", self.values_fps),
+            ("Сложность: ", "value_difficulty", self.values_difficulty),
+            ("Тема: ", "value_theme", self.values_theme),
+        ]
 
-        left_screenmode = pygame.sprite.Sprite()
-        create_sprite(left_screenmode, "left_arrow.png", 450, 250, settings_sprites)
-        right_screenmode = pygame.sprite.Sprite()
-        create_sprite(right_screenmode, "right_arrow.png", 900, 250, settings_sprites)
+        # Шаг строк оставлен прежним: ниже начинается опасная зона, раздвигать
+        # некуда. Зато зоны нажатия расширены вбок, где место есть.
+        row_top, row_step = 200, 50
+        controls = []  # (зона "назад", зона "вперёд", зона значения, подпись, поле, значения, y)
+        for i, (caption, field, values) in enumerate(rows):
+            y = row_top + i * row_step
 
-        left_fps = pygame.sprite.Sprite()
-        create_sprite(left_fps, "left_arrow.png", 450, 300, settings_sprites)
-        right_fps = pygame.sprite.Sprite()
-        create_sprite(right_fps, "right_arrow.png", 900, 300, settings_sprites)
+            left = pygame.sprite.Sprite()
+            create_sprite(left, "left_arrow.png", 450, y, settings_sprites)
+            right = pygame.sprite.Sprite()
+            create_sprite(right, "right_arrow.png", 900, y, settings_sprites)
 
-        left_difficulty = pygame.sprite.Sprite()
-        create_sprite(left_difficulty, "left_arrow.png", 450, 350, settings_sprites)
-        right_difficulty = pygame.sprite.Sprite()
-        create_sprite(right_difficulty, "right_arrow.png", 900, 350, settings_sprites)
-
-        left_theme = pygame.sprite.Sprite()
-        create_sprite(left_theme, "left_arrow.png", 450, 400, settings_sprites)
-        right_theme = pygame.sprite.Sprite()
-        create_sprite(right_theme, "right_arrow.png", 900, 400, settings_sprites)
+            controls.append((left.rect.inflate(60, 0), right.rect.inflate(60, 0),
+                             pygame.Rect(510, y, 380, 50), caption, field, values, y))
 
         # download = pygame.sprite.Sprite()
         # create_sprite(download, "download.png", self.size[0] - 350, 150, settings_sprites)
@@ -207,85 +227,8 @@ class Settings:
                             pygame.mixer.Sound(self.click).play()
                             return
 
-                        elif left_screensize.rect.collidepoint(event.pos):
+                        elif self._cycle(controls, event.pos):
                             pygame.mixer.Sound(self.click).play()
-                            if self.value_screensize > 0:
-                                self.value_screensize -= 1
-
-                            else:
-                                self.value_screensize = len(self.values_screensize) - 1
-
-                        elif right_screensize.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_screensize < len(self.values_screensize) - 1:
-                                self.value_screensize += 1
-
-                            else:
-                                self.value_screensize = 0
-
-                        elif left_screenmode.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_screenmode > 0:
-                                self.value_screenmode -= 1
-
-                            else:
-                                self.value_screenmode = len(self.values_screenmode) - 1
-
-                        elif right_screenmode.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_screenmode < len(self.values_screenmode) - 1:
-                                self.value_screenmode += 1
-
-                            else:
-                                self.value_screenmode = 0
-
-                        elif left_fps.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_fps > 0:
-                                self.value_fps -= 1
-
-                            else:
-                                self.value_fps = len(self.values_fps) - 1
-
-                        elif right_fps.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_fps < len(self.values_fps) - 1:
-                                self.value_fps += 1
-
-                            else:
-                                self.value_fps = 0
-
-                        elif left_difficulty.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_difficulty > 0:
-                                self.value_difficulty -= 1
-
-                            else:
-                                self.value_difficulty = len(self.values_difficulty) - 1
-
-                        elif right_difficulty.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_difficulty < len(self.values_difficulty) - 1:
-                                self.value_difficulty += 1
-
-                            else:
-                                self.value_difficulty = 0
-
-                        elif left_theme.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_theme > 0:
-                                self.value_theme -= 1
-
-                            else:
-                                self.value_theme = len(self.values_theme) - 1
-
-                        elif right_theme.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.click).play()
-                            if self.value_theme < len(self.values_theme) - 1:
-                                self.value_theme += 1
-
-                            else:
-                                self.value_theme = 0
 
                         # elif download.rect.collidepoint(event.pos):
                         #     pygame.mixer.Sound(self.enter).play()
@@ -370,19 +313,17 @@ class Settings:
             for i in [["Настройки", (255, 255, 255), 50, 50, 50, 1],
                       [f"Версия конфигурационного файла: \
 {get_values(self.path_config, 'version')[0]}",
-                       (128, 128, 128), 100, 150, 25, 2],
-                      ["Размер экрана: ", (255, 255, 255), 100, 200, 50, 1],
-                      [self.values_screensize[self.value_screensize], (255, 255, 255), 500, 200, 50,
-                       2], ["Режим экрана: ", (255, 255, 255), 100, 250, 50, 1],
-                      [self.values_screenmode[self.value_screenmode], (255, 255, 255), 500, 250, 50,
-                       2], ["FPS: ", (255, 255, 255), 100, 300, 50, 1],
-                      [str(self.values_fps[self.value_fps]), (255, 255, 255), 500, 300, 50, 2],
-                      ["Сложность: ", (255, 255, 255), 100, 350, 50, 1],
-                      [self.values_difficulty[self.value_difficulty], (255, 255, 255), 500, 350, 50,
-                       2], ["Тема: ", (255, 255, 255), 100, 405, 50, 1],
-                      [self.values_theme[self.value_theme], (255, 255, 255), 500, 400, 50, 2]]:
+                       (128, 128, 128), 100, 150, 25, 2]]:
                 self.screen.blit(
                     get_font(custom_font(i[5]), i[4]).render(i[0], True, i[1]), (i[2], i[3]))
+
+            for _, _, value_area, caption, field, values, y in controls:
+                self.screen.blit(
+                    get_font(custom_font(1), 50).render(caption, True, (255, 255, 255)), (100, y))
+
+                value = get_font(custom_font(2), 50).render(
+                    str(values[getattr(self, field)]), True, (255, 255, 255))
+                self.screen.blit(value, value.get_rect(center=value_area.center))
 
             pygame.display.flip()
             clock.tick(self.fps)

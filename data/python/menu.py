@@ -121,43 +121,83 @@ class Menu:
         if sound is not None:
             sound.stop()
 
+    #: Подписи в buttons.png лежат лентой: 8 штук по 250 px с шагом 300.
+    LABEL_WIDTH, LABEL_PITCH, LABEL_HEIGHT = 250, 300, 50
+
+    def _tiles(self):
+        """Плитки меню: (индекс подписи в ленте, что вернуть при нажатии).
+
+        Недоступные режимы просто не показываем — в карусели они занимали
+        место и молча ничего не делали при выборе.
+        """
+        unlocked = int(get_values(self.path_statistic, "mission")[0]) > 1
+
+        items = [(0, "Play")]
+        if unlocked:
+            items += [(1, "Play_With_Bot"), (2, "Farm")]
+        items += [(3, "Settings"), (4, "Achievements"), (5, "Statistic"),
+                  (6, "Instruction"), (7, "Exit")]
+        return items
+
     async def menu(self):
         """Меню"""
-        if int(get_values(self.path_statistic, "mission")[0]) > 1:
-            bot, farm = "Play_With_Bot", "Farm"
-        else:
-            bot, farm = None, None
-        buttons_tuple = ("Play", bot, farm, "Settings", "Achievements", "Statistic", "Instruction")
         fon = add_fon(get_values(self.path_config, "theme")[0], self.size)
 
         clock = pygame.time.Clock()
 
         menu_sprites = pygame.sprite.Group()
 
-        x = 300 * self.n
-
-        buttons = pygame.sprite.Sprite()
-        create_sprite(buttons, "buttons.png", self.size[0] / 2 - 125 - x,
-                      self.size[1] - (200 if self.size[1] == 768 else 300), menu_sprites)
-
-        mat = pygame.sprite.Sprite()
-        create_sprite(mat, f"mat_{self.size[1]}.png", 0,
-                      self.size[1] - (200 if self.size[1] == 768 else 300), menu_sprites)
-
-        frame = pygame.sprite.Sprite()
-        create_sprite(frame, "frame_6.png", self.size[0] / 2 - 125,
-                      self.size[1] - (200 if self.size[1] == 768 else 300), menu_sprites)
-
-        c = (250 if self.size[1] == 768 else 350)
-        down_arrow = pygame.sprite.Sprite()
-        create_sprite(down_arrow, "down_arrow.png", self.size[0] / 2 - 25,
-                      self.size[1] - (250 if self.size[1] == 768 else 350), menu_sprites)
-
         title, t = get_values(self.path_statistic, "title")[0], pygame.sprite.Sprite()
         if title != "not":
             create_sprite(t, get_values_sqlite(self.path_achievements, "titles", f"id = {title}",
                                                "image")[0][0], self.size[0] - 100,
                           self.size[1] - 100, menu_sprites)
+
+        # Сетка плиток вместо карусели: по кнопке видно, что это кнопка, и
+        # нажимается она сразу, без перелистывания к нужной.
+        items = self._tiles()
+        big = self.size[1] != 768
+
+        tile_w, tile_h = (500, 100) if big else (420, 84)
+        gap_x, gap_y = (100, 40) if big else (80, 32)
+        columns = 2
+        rows = (len(items) + columns - 1) // columns
+
+        grid_w = columns * tile_w + (columns - 1) * gap_x
+        grid_h = rows * tile_h + (rows - 1) * gap_y
+        top_margin = 210 if big else 150
+        grid_x = (self.size[0] - grid_w) // 2
+        grid_y = top_margin + max(
+            0, (self.size[1] - top_margin - (170 if big else 120) - grid_h) // 2)
+
+        strip = load_image("buttons.png")
+        frame_image = pygame.transform.scale(load_image("frame_6.png"), (tile_w, tile_h))
+
+        # Подписи в ленте прозрачные, а фон меню — светлая фотография моря.
+        # Без подложки белый текст на небе почти не читается.
+        plate = pygame.Surface((tile_w, tile_h), pygame.SRCALPHA)
+        plate.fill((12, 18, 28, 210))
+
+        # Шапка с уровнем и названием — по той же причине, что и подложки плиток
+        header_height = 150 if big else 110
+        header = pygame.Surface((self.size[0], header_height), pygame.SRCALPHA)
+        header.fill((12, 18, 28, 150))
+
+        tiles = []  # (прямоугольник, готовая подпись, что вернуть)
+        for i, (label_index, action) in enumerate(items):
+            rect = pygame.Rect(
+                grid_x + (i % columns) * (tile_w + gap_x),
+                grid_y + (i // columns) * (tile_h + gap_y), tile_w, tile_h)
+            label = pygame.transform.scale(
+                strip.subsurface(pygame.Rect(label_index * self.LABEL_PITCH, 0,
+                                             self.LABEL_WIDTH, self.LABEL_HEIGHT)),
+                (tile_w, tile_h))
+            tiles.append((rect, label, action))
+
+        # Подсветка нужна только при управлении с клавиатуры: на телефоне
+        # «текущей» кнопки нет, там просто попадают пальцем.
+        self.n = min(self.n, len(tiles) - 1)
+        keyboard = False
 
         # pygame.time.set_timer в WASM не реализован, поэтому выдержку в 3
         # секунды перед уходом плашки считаем кадрами.
@@ -166,39 +206,11 @@ class Menu:
             push = pygame.sprite.Sprite()
             create_sprite(push, "mat_4.png", self.size[0] // 2 - 200, o, menu_sprites)
 
-        left, right, down, text_menu = False, False, True, [
-            ["Sea Battle", (255, 255, 255), 50, 200 if self.size[1] == 768 else 300, 50, 1]]
-
+        hint = None
         if not int(get_values(self.path_statistic, "mission")[0]) > 1:
-            text_menu.append(
-                ['Чтобы открыть все режимы, пройди "Пролог"', (255, 255, 255), 0, self.size[1] - 25,
-                 25, 2])
+            hint = 'Чтобы открыть все режимы, пройди "Пролог"'
+
         while True:
-            if right:
-                if x < (300 * self.n) - 1:
-                    x += 150
-
-                else:
-                    x += 1  # корректировка
-                    right = False
-
-            if left:
-                if x > (300 * self.n) + 1:
-                    x -= 150
-
-                else:
-                    x -= 1
-                    left = False
-
-            if down:
-                c -= 2
-                if c <= (230 if self.size[1] == 768 else 330):
-                    down = False
-
-            else:
-                c += 2
-                if c >= (250 if self.size[1] == 768 else 350):
-                    down = True
             if self.push:
                 if o + 5 <= 0 and up:
                     o += 5
@@ -218,99 +230,44 @@ class Menu:
                 elif not up:
                     self.push = False
 
-            put_sprite(buttons, self.size[0] / 2 - 125 - x,
-                       self.size[1] - (200 if self.size[1] == 768 else 300))
-
-            put_sprite(down_arrow, self.size[0] / 2 - 25, self.size[1] - c)
-
             if self.push:
                 put_sprite(push, self.size[0] // 2 - 200, o)
-
-            arrow_sprites = pygame.sprite.Group()
-
-            left_arrow = pygame.sprite.Sprite()
-            if self.n - 1 >= 0:
-                create_sprite(left_arrow, "left_arrow.png", self.size[0] / 2 - 175,
-                              self.size[1] - (200 if self.size[1] == 768 else 300), arrow_sprites)
-            else:
-                left_arrow.kill()
-
-            right_arrow = pygame.sprite.Sprite()
-            if self.n + 1 <= len(buttons_tuple):
-                create_sprite(right_arrow, "right_arrow.png", self.size[0] / 2 + 125,
-                              self.size[1] - (200 if self.size[1] == 768 else 300), arrow_sprites)
-            else:
-                right_arrow.kill()
 
             try:
                 for event in pygame.event.get():
                     if event.type == pygame.QUIT:
                         terminate()
 
-                    elif event.type == pygame.MOUSEBUTTONDOWN:
-                        if event.button == 1:
-                            s = pygame.mixer.Sound(self.click)
+                    elif event.type == pygame.MOUSEBUTTONDOWN and event.button == 1:
+                        try:
+                            if t.rect.collidepoint(event.pos):
+                                pygame.mixer.Sound(self.click).play()
+                                return "Titles"
+                        except AttributeError:
+                            pass
 
-                            try:
-                                if left_arrow.rect.collidepoint(event.pos):
-                                    s.play()
-                                    x = 300 * self.n + 1
-                                    left = True
-                                    self.n -= 1
-                            except AttributeError:
-                                pass
-
-                            try:
-                                if right_arrow.rect.collidepoint(event.pos):
-                                    s.play()
-                                    x = 300 * self.n - 1
-                                    right = True
-                                    self.n += 1
-                            except AttributeError:
-                                pass
-
-                            try:
-                                if t.rect.collidepoint(event.pos):
-                                    s.play()
-                                    return "Titles"
-                            except AttributeError:
-                                pass
-
-                            if frame.rect.collidepoint(event.pos):
+                        for i, (rect, _, action) in enumerate(tiles):
+                            if rect.collidepoint(event.pos):
                                 pygame.mixer.Sound(self.enter).play()
-                                if self.n == len(buttons_tuple):
+                                self.n = i
+                                if action == "Exit":
                                     terminate()
-                                return buttons_tuple[self.n]
-
-                        elif event.button == 4 and self.n - 1 >= 0:
-                            x = 300 * self.n + 1
-                            left = True
-                            self.n -= 1
-
-                        elif event.button == 5 and self.n + 1 <= len(buttons_tuple):
-                            x = 300 * self.n - 1
-                            right = True
-                            self.n += 1
+                                return action
 
                     elif event.type == pygame.KEYDOWN:
-                        s = pygame.mixer.Sound(self.click)
-                        if event.key == pygame.K_LEFT and self.n - 1 >= 0:
-                            s.play()
-                            x = 300 * self.n + 1
-                            left = True
-                            self.n -= 1
-
-                        elif event.key == pygame.K_RIGHT and self.n + 1 <= len(buttons_tuple):
-                            s.play()
-                            x = 300 * self.n - 1
-                            right = True
-                            self.n += 1
+                        if event.key in (pygame.K_LEFT, pygame.K_RIGHT,
+                                         pygame.K_UP, pygame.K_DOWN):
+                            keyboard = True
+                            pygame.mixer.Sound(self.click).play()
+                            self.n = max(0, min(len(tiles) - 1, self.n + {
+                                pygame.K_LEFT: -1, pygame.K_RIGHT: 1,
+                                pygame.K_UP: -columns, pygame.K_DOWN: columns}[event.key]))
 
                         elif event.key == pygame.K_RETURN:
                             pygame.mixer.Sound(self.enter).play()
-                            if self.n == len(buttons_tuple):
+                            if tiles[self.n][2] == "Exit":
                                 terminate()
-                            return buttons_tuple[self.n]
+                            return tiles[self.n][2]
 
                         elif event.key in (pygame.K_ESCAPE, pygame.K_q):
                             terminate()
@@ -318,21 +275,32 @@ class Menu:
                 terminate()
 
             self.screen.blit(fon, (0, 0))
-            menu_sprites.draw(self.screen)
-            arrow_sprites.draw(self.screen)
-            text = format_xp(self.path_statistic)[0].split("\n")
-            y = 0
-            for line in text:
-                self.screen.blit(
-                    get_font(self.font_1, 50).render(line, True, (255, 255, 255)), (0, y))
-                y += 50
-            for j in text_menu:
-                self.screen.blit(
-                    get_font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
+            self.screen.blit(header, (0, 0))
 
-            # text = get_font(self.font_1, 50).render(self.nickname, True, (255, 255, 255))
-            # text_rect = text.get_rect()
-            # self.screen.blit(text, (self.size[0] - tuple(text_rect)[2], 0))
+            for i, (rect, label, _) in enumerate(tiles):
+                self.screen.blit(plate, rect)
+                self.screen.blit(label, rect)
+                self.screen.blit(frame_image, rect)
+                if keyboard and i == self.n:
+                    pygame.draw.rect(self.screen, (255, 255, 0), rect.inflate(12, 12), 4)
+
+            menu_sprites.draw(self.screen)
+
+            y = 5
+            for line in format_xp(self.path_statistic)[0].split("\n"):
+                self.screen.blit(
+                    get_font(self.font_1, 50).render(line, True, (255, 255, 255)), (20, y))
+                y += 50
+
+            caption = get_font(self.font_1, 80 if big else 60).render(
+                "Sea Battle", True, (255, 255, 255))
+            self.screen.blit(caption, caption.get_rect(
+                center=(self.size[0] // 2, 105 if big else 75)))
+
+            if hint:
+                surface = get_font(custom_font(2), 25).render(hint, True, (255, 255, 255))
+                self.screen.blit(surface, surface.get_rect(
+                    center=(self.size[0] // 2, self.size[1] - 30)))
 
             if self.push:
                 for line in [("Получены награды", 40, o + 25),
