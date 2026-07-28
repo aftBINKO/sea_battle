@@ -317,6 +317,9 @@ def extract_files(path_archive, path_extract, *values, a=False):
                 archive.extract(file, path_extract)
 
 
+#: Заголовок окна и подпись вкладки браузера
+WINDOW_TITLE = "Sea Battle"
+
 #: Высота холста. Вся вёрстка построена под неё, поэтому она не меняется —
 #: подстраивается только ширина, под пропорции устройства.
 DESIGN_HEIGHT = 768
@@ -371,7 +374,6 @@ def create_window(path):
 
     elif screenmode == "window":
         screen = pygame.display.set_mode(size)  # создаём окно
-        pygame.display.set_caption("Sea Battle")  # ставим заголовок
 
     elif screenmode == "noframe":
         screen = pygame.display.set_mode(size, pygame.NOFRAME)
@@ -379,6 +381,9 @@ def create_window(path):
     elif screenmode == "fullscreen":
         screen = pygame.display.set_mode(size, pygame.FULLSCREEN)
 
+    # Заголовок ставим всегда: в браузере это подпись вкладки, и без него
+    # там оставалось служебное "pygame window".
+    pygame.display.set_caption(WINDOW_TITLE)
     pygame.display.set_icon(load_image("icon.png"))
 
     return screen, int(fps)

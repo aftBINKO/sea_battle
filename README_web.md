@@ -15,10 +15,15 @@ python -m venv ../sea_battle_venv
 Запуск с локальным сервером:
 
 ```bash
-PYTHONUTF8=1 ../sea_battle_venv/Scripts/python -m pygbag --port 8000 .
+PYTHONUTF8=1 ../sea_battle_venv/Scripts/python -m pygbag --title "Sea Battle" --port 8000 .
 ```
 
 Открыть http://localhost:8000 — игра соберётся и запустится.
+
+`--title` задаёт подпись вкладки. Иконку pygbag берёт из `favicon.png` в
+корне проекта — она собрана из `data/img/icon.png`: силуэт обрезан по
+содержимому и вписан в квадрат, иначе в размере 16 px корабль терялся
+среди пустых полей.
 
 ## Грабли, на которые легко наступить
 
