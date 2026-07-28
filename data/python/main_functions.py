@@ -119,6 +119,17 @@ def load_image(name):
     return image
 
 
+def scale_logo(name, width):
+    """Логотип заданной ширины с сохранением пропорции.
+
+    Логотип — вытянутая надпись; если задать ему обе стороны наугад,
+    он расплющивается.
+    """
+    source = load_image(name)
+    height = max(1, round(source.get_height() * width / source.get_width()))
+    return pygame.transform.scale(source, (width, height))
+
+
 def stretch_to(name, width):
     """Размер для create_sprite: заданная ширина, исходная высота.
 

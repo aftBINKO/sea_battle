@@ -6,8 +6,8 @@ import pygame
 
 from .main_functions import terminate, create_sprite, put_sprite, format_xp, get_values, \
     get_values_sqlite, add_fon, load_image, extract_files, custom_font, get_font, screen_size, \
-    stretch_to
-from .platform_compat import WEB_DEMO
+    stretch_to, scale_logo
+from .platform_compat import WEB_DEMO, IS_WEB
 
 try:  # для воспроизведения заставки по кадрам; в браузере OpenCV недоступен
     from cv2 import VideoCapture
@@ -73,17 +73,15 @@ class Menu:
         s.stop()
 
     async def _screensaver_static(self):
-        """Заставка без видео: логотип и название под звук вступления"""
-        try:
-            sound = pygame.mixer.Sound(self.sound_screensaver)
-            sound.play()
-        except pygame.error:
-            sound = None
+        """Заставка без видео: логотип и название.
 
+        Без звука: браузер всё равно глушит воспроизведение до первого
+        касания, так что вступление в вебе толком не звучало.
+        """
         fon = add_fon(get_values(self.path_config, "theme")[0], self.size)
 
-        logo = pygame.transform.scale(load_image("aft_games.png"), (200, 200))
-        logo_rect = logo.get_rect(center=(self.size[0] // 2, self.size[1] // 2 - 50))
+        logo = scale_logo("zf.png", 360)
+        logo_rect = logo.get_rect(center=(self.size[0] // 2, self.size[1] // 2 - 60))
 
         title = get_font(self.font_1, 90).render("Sea Battle", True, (255, 255, 255))
         title_rect = title.get_rect(center=(self.size[0] // 2, self.size[1] // 2 + 120))
@@ -119,9 +117,6 @@ class Menu:
             clock.tick(self.fps)
             await asyncio.sleep(0)
 
-        if sound is not None:
-            sound.stop()
-
     #: Подписи в buttons.png лежат лентой: 8 штук по 250 px с шагом 300.
     LABEL_WIDTH, LABEL_PITCH, LABEL_HEIGHT = 250, 300, 50
 
@@ -151,7 +146,11 @@ class Menu:
             # они в меню, а не спрятаны в настройках.
             items += [("Разработчики", "Developers"), ("Полная версия", "FullVersion")]
 
-        items += [(7, "Exit")]
+        if not IS_WEB:
+            # В браузере выходить некуда: игра просто оставит мёртвый холст,
+            # а вкладку игрок закроет сам.
+            items += [(7, "Exit")]
+
         return items
 
     async def menu(self):
@@ -301,8 +300,8 @@ class Menu:
                                 terminate()
                             return tiles[self.n][2]
 
-                        elif event.key in (pygame.K_ESCAPE, pygame.K_q):
-                            terminate()
+                        elif event.key in (pygame.K_ESCAPE, pygame.K_q) and not IS_WEB:
+                            terminate()  # см. комментарий про выход в _tiles()
             except pygame.error:
                 terminate()
 

@@ -1,7 +1,7 @@
 import asyncio
 
 from .main_functions import terminate, load_image, create_sprite, get_values, extract_files, \
-    add_fon, set_values, custom_font, get_font, screen_size, stretch_to
+    add_fon, set_values, custom_font, get_font, screen_size, stretch_to, scale_logo
 from .platform_compat import persist, reload_page, IS_WEB
 
 import pygame
@@ -400,9 +400,6 @@ class About:
         vk = pygame.sprite.Sprite()
         create_sprite(vk, "vk.png", 375, 150, about_sprites)
 
-        youtube = pygame.sprite.Sprite()
-        create_sprite(youtube, "youtube.png", 450, 150, about_sprites)
-
         pygame_sprite = pygame.sprite.Sprite()
         create_sprite(pygame_sprite, "pygame.png", self.size[0] - 200, self.size[1] - 100,
                       about_sprites)
@@ -413,21 +410,15 @@ class About:
         thank = pygame.sprite.Sprite()
         create_sprite(thank, "thank.png", 100, 250, about_sprites)
 
-        # set_timer в WASM не работает, поэтому кадр анимации логотипа
-        # переключаем по счётчику кадров: 200 мс — это fps / 5 кадров.
-        n, animation_frames, animation_period = 1, 0, max(1, self.fps // 5)
+        # Логотип студии статичный: анимация из пяти кадров была нарисована
+        # под старое лого, а нового набора кадров нет.
+        logo = pygame.sprite.Sprite()
+        # Ширина ограничена соседями: иконки соцсетей начинаются с x = 300
+        logo.image = scale_logo("zf.png", 180)
+        logo.rect = logo.image.get_rect(midleft=(100, 170))
+        about_sprites.add(logo)
 
-        aft_games = pygame.sprite.Sprite()
-        create_sprite(aft_games, os.path.join("animate", f"animate_{n}.png"), 100, 150,
-                      about_sprites)
         while True:
-            if n < 5:
-                animation_frames += 1
-                if animation_frames >= animation_period:
-                    animation_frames = 0
-                    n += 1
-                    aft_games.image = load_image(os.path.join("animate", f"animate_{n}.png"))
-
             for event in pygame.event.get():
                 if event.type == pygame.QUIT:
                     terminate()
@@ -441,15 +432,11 @@ class About:
                         link = None
                         if discord.rect.collidepoint(event.pos):
                             pygame.mixer.Sound(self.enter).play()
-                            link = "https://discord.gg/6BaXEbkJkw"
+                            link = "https://discord.gg/scu923dpdA"
 
                         elif vk.rect.collidepoint(event.pos):
                             pygame.mixer.Sound(self.enter).play()
-                            link = "https://vk.com/c_aft"
-
-                        elif youtube.rect.collidepoint(event.pos):
-                            pygame.mixer.Sound(self.enter).play()
-                            link = "https://www.youtube.com/@aftbinko"
+                            link = "https://vk.ru/aftcis"
 
                         elif yandex.rect.collidepoint(event.pos):
                             pygame.mixer.Sound(self.enter).play()
