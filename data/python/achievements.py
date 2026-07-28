@@ -6,7 +6,7 @@ import os
 from datetime import datetime, date
 
 from .main_functions import terminate, load_image, create_sprite, set_statistic, get_values, \
-    custom_font, DragScroll, get_font, draw_scrollbar, render_text
+    custom_font, DragScroll, get_font, draw_scrollbar, render_text, screen_size, stretch_to
 
 
 class Achievements:
@@ -18,8 +18,7 @@ class Achievements:
         self.path_config, self.path_achievements, self.path_statistic = os.path.join(
             path, "config.json"), os.path.join(path, "achievements.sqlite"), os.path.join(
             path, "statistic.json")
-        self.screen, self.fps, self.path, self.size = screen, fps, path, tuple(
-            map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
+        self.screen, self.fps, self.path, self.size = screen, fps, path, screen_size()
 
         with sqlite3.connect(self.path_achievements) as con:
             cur = con.cursor()
@@ -50,11 +49,13 @@ class Achievements:
         menu_sprites = pygame.sprite.Group()
 
         m1 = pygame.sprite.Sprite()
-        create_sprite(m1, f"mat_2_{self.size[1]}.png", 0, 0, menu_sprites)
+        create_sprite(m1, f"mat_2_{self.size[1]}.png", 0, 0, menu_sprites,
+                      stretch_to(f"mat_2_{self.size[1]}.png", self.size[0]))
 
         m2 = pygame.sprite.Sprite()
         create_sprite(m2, f"mat_3_{self.size[1]}.png", 0,
-                      self.size[1] - (100 if self.size[1] == 768 else 250), menu_sprites)
+                      self.size[1] - (100 if self.size[1] == 768 else 250), menu_sprites,
+                      stretch_to(f"mat_3_{self.size[1]}.png", self.size[0]))
 
         title_page = pygame.sprite.Sprite()
         create_sprite(title_page, "title_page.png", self.size[0] - 300, self.size[1] - 100,
@@ -119,6 +120,9 @@ class Achievements:
 
             self.screen.blit(fon, (0, 0))
 
+            # Колонки привязаны к ширине строки, а не к числам под холст 1366
+            progress_x, reward_x = int(self.size[0] * 0.73), int(self.size[0] * 0.84)
+
             achievement_sprites, y, text, text_achievements = pygame.sprite.Group(), a, [
                 ["Достижения", (255, 255, 255), 50, 50, 50, 1],
                 [f"{completed}%", (0, 0, 0), 625,
@@ -131,8 +135,9 @@ class Achievements:
                     continue
 
                 mat = pygame.sprite.Sprite()
-                create_sprite(mat, f"mat_{str(achievement[4]).split('.')[0]}_{self.size[1]}.png", 50,
-                              y, achievement_sprites)
+                row_image = f"mat_{str(achievement[4]).split('.')[0]}_{self.size[1]}.png"
+                create_sprite(mat, row_image, 50, y, achievement_sprites,
+                              stretch_to(row_image, self.size[0] - 100))
 
                 frame = pygame.sprite.Sprite()
                 create_sprite(frame, f"frame_{achievement[3]}.png", 145, y + 25, achievement_sprites)
@@ -147,21 +152,21 @@ class Achievements:
                                           [achievement[1], (255, 255, 255), 400, y + 25, 50, 1],
                                           [achievement[2], (192, 192, 192), 400, y + 100, 20, 2],
                                           ["Прогресс", (192, 192, 192),
-                                           1000 if self.size[1] == 768 else 1100,
+                                           progress_x,
                                            y + 10, 25, 2],
                                           [f"{int(achievement[4] * 100)}%", (255, 255, 255),
-                                           1000 if self.size[1] == 768 else 1100, y + 45, 40, 1],
+                                           progress_x, y + 45, 40, 1],
                                           ["Награда", (192, 192, 192),
-                                           1150 if self.size[1] == 768 else 1500,
+                                           reward_x,
                                            y + 10, 25, 2], [f"{achievement[6]} XP", (255, 255, 255),
-                                                            1150 if self.size[1] == 768 else 1500,
+                                                            reward_x,
                                                             y + 45, 40, 1],
                                           [achievement[5], (255, 255, 255),
-                                           1000 if self.size[1] == 768 else 1100,
+                                           progress_x,
                                            y + 100, 25, 2]])
                 if achievement[8] is not None:
                     text_achievements.append([self.title_names[achievement[8]], (255, 255, 0),
-                                              1150 if self.size[1] == 768 else 1500, y + 100, 25,
+                                              reward_x, y + 100, 25,
                                               1])
                 y += 175
 
@@ -236,8 +241,7 @@ class Titles:
         self.path_config, self.path_achievements, self.path_statistic = os.path.join(
             path, "config.json"), os.path.join(path, "achievements.sqlite"), os.path.join(
             path, "statistic.json")
-        self.screen, self.fps, self.path, self.size = screen, fps, path, tuple(
-            map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
+        self.screen, self.fps, self.path, self.size = screen, fps, path, screen_size()
 
         with sqlite3.connect(self.path_achievements) as con:
             cur = con.cursor()
@@ -258,7 +262,8 @@ class Titles:
         menu_sprites = pygame.sprite.Group()
 
         mat = pygame.sprite.Sprite()
-        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, menu_sprites)
+        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, menu_sprites,
+                      stretch_to(f"mat_6_{self.size[1]}.png", self.size[0] - 100))
 
         x = pygame.sprite.Sprite()
         create_sprite(x, "x.png", self.size[0] - 100, 50, menu_sprites)

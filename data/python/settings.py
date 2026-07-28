@@ -1,8 +1,8 @@
 import asyncio
 
 from .main_functions import terminate, load_image, create_sprite, get_values, extract_files, \
-    add_fon, set_values, custom_font, get_font
-from .platform_compat import persist, reload_page
+    add_fon, set_values, custom_font, get_font, screen_size, stretch_to
+from .platform_compat import persist, reload_page, IS_WEB
 
 import pygame
 import os
@@ -28,8 +28,7 @@ class Settings:
         self.path_config = os.path.join(path, "config.json")
         self.path_statistic = os.path.join(path, "statistic.json")
         self.path_achievements = os.path.join(path, "achievements.sqlite")
-        self.screen, self.fps, self.path, self.size = screen, fps, path, tuple(
-            map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
+        self.screen, self.fps, self.path, self.size = screen, fps, path, screen_size()
         self.value_screensize = self.values_screensize.index(
             get_values(self.path_config, "screensize")[0])
         self.value_screenmode = self.values_screenmode.index(
@@ -157,7 +156,8 @@ class Settings:
         create_sprite(x, "x.png", self.size[0] - 100, 50, settings_sprites)
 
         mat = pygame.sprite.Sprite()
-        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, settings_sprites)
+        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, settings_sprites,
+                      stretch_to(f"mat_6_{self.size[1]}.png", self.size[0] - 100))
 
         apply = pygame.sprite.Sprite()
         create_sprite(apply, "apply.png", self.size[0] - 350, self.size[1] - 150, settings_sprites)
@@ -166,27 +166,38 @@ class Settings:
         # почти одинаковых ветки обработки, а зоны нажатия были размером со
         # стрелку 50x50 — на телефоне это меньше сантиметра.
         rows = [
-            ("Размер экрана: ", "value_screensize", self.values_screensize),
-            ("Режим экрана: ", "value_screenmode", self.values_screenmode),
-            ("FPS: ", "value_fps", self.values_fps),
             ("Сложность: ", "value_difficulty", self.values_difficulty),
             ("Тема: ", "value_theme", self.values_theme),
         ]
 
-        # Шаг строк оставлен прежним: ниже начинается опасная зона, раздвигать
-        # некуда. Зато зоны нажатия расширены вбок, где место есть.
-        row_top, row_step = 200, 50
+        if not IS_WEB:
+            # В браузере холст подстраивается под экран сам, а режим окна и
+            # полноэкранный режим задаёт страница — менять тут нечего.
+            rows = [
+                ("Размер экрана: ", "value_screensize", self.values_screensize),
+                ("Режим экрана: ", "value_screenmode", self.values_screenmode),
+                ("FPS: ", "value_fps", self.values_fps),
+            ] + rows
+
+        # Освободившееся место отдаём строкам: на телефоне в них надо попадать
+        # пальцем, а раньше шаг был впритык из-за пяти пунктов.
+        row_step = 50 if len(rows) > 3 else 70
+        row_top = 220 if len(rows) > 3 else 250
+
+        left_x, right_x = int(self.size[0] * 0.33), int(self.size[0] * 0.66)
+
         controls = []  # (зона "назад", зона "вперёд", зона значения, подпись, поле, значения, y)
         for i, (caption, field, values) in enumerate(rows):
             y = row_top + i * row_step
 
             left = pygame.sprite.Sprite()
-            create_sprite(left, "left_arrow.png", 450, y, settings_sprites)
+            create_sprite(left, "left_arrow.png", left_x, y, settings_sprites)
             right = pygame.sprite.Sprite()
-            create_sprite(right, "right_arrow.png", 900, y, settings_sprites)
+            create_sprite(right, "right_arrow.png", right_x, y, settings_sprites)
 
             controls.append((left.rect.inflate(60, 0), right.rect.inflate(60, 0),
-                             pygame.Rect(510, y, 380, 50), caption, field, values, y))
+                             pygame.Rect(left_x + 60, y, right_x - left_x - 60, 50),
+                             caption, field, values, y))
 
         # download = pygame.sprite.Sprite()
         # create_sprite(download, "download.png", self.size[0] - 350, 150, settings_sprites)
@@ -198,15 +209,20 @@ class Settings:
         create_sprite(developers, "developers.png", self.size[0] - 350, self.size[1] - 250,
                       settings_sprites)
 
-        danger_zone = pygame.sprite.Sprite()
-        create_sprite(danger_zone, "danger_zone.png", 100, self.size[1] - 300, settings_sprites)
+        # Рамка опасной зоны — картинка фиксированной ширины 800, центруем её
+        # вместе с кнопками, иначе на широком экране она липнет к левому краю.
+        zone_x = (self.size[0] - 800) // 2
 
-        recovery_settings = pygame.sprite.Sprite()
-        create_sprite(recovery_settings, "recovery_settings.png", 225, self.size[1] - 175,
+        danger_zone = pygame.sprite.Sprite()
+        create_sprite(danger_zone, "danger_zone.png", zone_x, self.size[1] - 300,
                       settings_sprites)
 
+        recovery_settings = pygame.sprite.Sprite()
+        create_sprite(recovery_settings, "recovery_settings.png", zone_x + 125,
+                      self.size[1] - 175, settings_sprites)
+
         new_game = pygame.sprite.Sprite()
-        create_sprite(new_game, "new_game.png", 525, self.size[1] - 175,
+        create_sprite(new_game, "new_game.png", zone_x + 425, self.size[1] - 175,
                       settings_sprites)
 
         # какая кнопка опасной зоны ждёт второго касания и сколько кадров ещё ждёт
@@ -308,7 +324,7 @@ class Settings:
                     (hint, hint_color, 80)):
                 surface = get_font(custom_font(2), 17).render(line, True, color)
                 self.screen.blit(surface, surface.get_rect(
-                    center=(500, self.size[1] - 300 + offset)))
+                    center=(zone_x + 400, self.size[1] - 300 + offset)))
 
             for i in [["Настройки", (255, 255, 255), 50, 50, 50, 1],
                       [f"Версия конфигурационного файла: \
@@ -340,9 +356,7 @@ class About:
     font_2 = os.path.join("data", os.path.join("fonts", "font_2.ttf"))
 
     def __init__(self, screen, fps, path_config):
-        self.screen, self.fps, self.size, self.update, self.path_config = screen, fps, tuple(
-            map(int, (get_values(
-                path_config, "screensize")[0].split("x")))), pygame.USEREVENT + 1, path_config
+        self.screen, self.fps, self.size, self.update, self.path_config = screen, fps, screen_size(), pygame.USEREVENT + 1, path_config
 
     async def menu(self):
         """Меню с информацией"""
@@ -359,7 +373,8 @@ class About:
             titles = titles.read().split("\n")
 
         mat = pygame.sprite.Sprite()
-        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, about_sprites)
+        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, about_sprites,
+                      stretch_to(f"mat_6_{self.size[1]}.png", self.size[0] - 100))
 
         discord = pygame.sprite.Sprite()
         create_sprite(discord, "discord.png", 300, 150, about_sprites)

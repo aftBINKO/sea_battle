@@ -7,7 +7,7 @@ import json
 import sys
 import os
 
-from .platform_compat import IS_WEB
+from .platform_compat import IS_WEB, viewport_aspect
 
 
 #: Насколько можно увести палец, чтобы касание всё ещё считалось нажатием
@@ -17,6 +17,18 @@ TAP_SLOP = 12
 #: кораблей и панели с ними, поэтому число одно на всю игру.
 #: Предел — два поля рядом в бою: больше 0.044 второе не помещается по ширине.
 CELL_RATIO = 0.041
+
+#: Сколько высоты занято подписями сверху и кнопками снизу
+BOARD_MARGINS = 130
+
+
+def cell_size(width, height):
+    """Размер клетки поля.
+
+    Считается от ширины, но обязательно упирается в высоту: холст тянется
+    только вбок, и на широком экране поле иначе вылезает за нижний край.
+    """
+    return max(20, min(int(width * CELL_RATIO), (height - BOARD_MARGINS) // 10))
 
 
 class DragScroll:
@@ -105,6 +117,16 @@ def load_image(name):
         _image_cache[name] = image  # кэшируем только уже готовое к выводу
 
     return image
+
+
+def stretch_to(name, width):
+    """Размер для create_sprite: заданная ширина, исходная высота.
+
+    Подложки нарисованы под холст 1366 px. Раз ширина теперь зависит от
+    устройства, их надо растягивать, иначе на широком экране справа остаётся
+    непокрытая полоса.
+    """
+    return width, load_image(name).get_height()
 
 
 def get_font(path, size):
@@ -284,6 +306,34 @@ def extract_files(path_archive, path_extract, *values, a=False):
                 archive.extract(file, path_extract)
 
 
+#: Высота холста. Вся вёрстка построена под неё, поэтому она не меняется —
+#: подстраивается только ширина, под пропорции устройства.
+DESIGN_HEIGHT = 768
+
+#: Пределы ширины: уже 4:3 и шире 21:9 макеты уже разъезжаются.
+MIN_WIDTH, MAX_WIDTH = 1024, 1920
+
+
+def web_window_size():
+    """Размер холста под пропорции окна браузера"""
+    aspect = viewport_aspect()
+    if not aspect:
+        return 1366, DESIGN_HEIGHT
+
+    width = int(round(DESIGN_HEIGHT * aspect))
+    return max(MIN_WIDTH, min(MAX_WIDTH, width)), DESIGN_HEIGHT
+
+
+def screen_size():
+    """Фактический размер холста.
+
+    Раньше вёрстка бралась из config.json, но теперь холст подстраивается
+    под устройство, и файл о его размере ничего не знает.
+    """
+    surface = pygame.display.get_surface()
+    return surface.get_size() if surface is not None else (1366, DESIGN_HEIGHT)
+
+
 def create_window(path):
     """Функция создаёт окно pygame"""
     path_config = os.path.join(path, "config.json")
@@ -302,8 +352,10 @@ def create_window(path):
     size, screen = tuple(map(int, screensize.split("x"))), None
 
     if IS_WEB:
-        # В браузере холст всегда один и масштабируется средствами страницы,
-        # поэтому режимы окна (рамка/полный экран) смысла не имеют.
+        # Холст подгоняем под пропорции экрана телефона, иначе по краям
+        # остаются чёрные полосы. Высоту держим равной 768: вся вёрстка игры
+        # рассчитана на неё, и менять надо только горизонталь.
+        size = web_window_size()
         screen = pygame.display.set_mode(size)
 
     elif screenmode == "window":

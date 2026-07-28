@@ -5,7 +5,8 @@ import sqlite3
 import pygame
 
 from .main_functions import terminate, create_sprite, put_sprite, format_xp, get_values, \
-    get_values_sqlite, add_fon, load_image, extract_files, custom_font, get_font
+    get_values_sqlite, add_fon, load_image, extract_files, custom_font, get_font, screen_size, \
+    stretch_to
 
 try:  # для воспроизведения заставки по кадрам; в браузере OpenCV недоступен
     from cv2 import VideoCapture
@@ -30,8 +31,7 @@ class Menu:
         self.path_config, self.path_achievements, self.path_statistic, self.path = os.path.join(
             path, "config.json"), os.path.join(path, "achievements.sqlite"), os.path.join(
             path, "statistic.json"), path
-        self.screen, self.fps, self.size, self.n, self.push = screen, fps, tuple(
-            map(int, (get_values(self.path_config, "screensize")[0].split("x")))), 0, push
+        self.screen, self.fps, self.size, self.n, self.push = screen, fps, screen_size(), 0, push
         self.path_screensaver = os.path.join("data",
                                              os.path.join("video", f"screensaver{self.size[1]}.mp4"))
 
@@ -201,6 +201,9 @@ class Menu:
 
         # pygame.time.set_timer в WASM не реализован, поэтому выдержку в 3
         # секунды перед уходом плашки считаем кадрами.
+        # Плашка останавливается чуть ниже верхнего края: вплотную к нему у
+        # первой строки срезалась верхушка букв.
+        push_rest = 14
         o, push, timer_frames, timer_flag, back, up = -100, None, 0, False, False, True
         if self.push:
             push = pygame.sprite.Sprite()
@@ -212,7 +215,7 @@ class Menu:
 
         while True:
             if self.push:
-                if o + 5 <= 0 and up:
+                if o + 5 <= push_rest and up:
                     o += 5
                 else:
                     if not timer_flag:
@@ -292,10 +295,14 @@ class Menu:
                     get_font(self.font_1, 50).render(line, True, (255, 255, 255)), (20, y))
                 y += 50
 
-            caption = get_font(self.font_1, 80 if big else 60).render(
-                "Sea Battle", True, (255, 255, 255))
-            self.screen.blit(caption, caption.get_rect(
-                center=(self.size[0] // 2, 105 if big else 75)))
+            # Плашка о наградах выезжает сверху по центру, ровно на название —
+            # пока она висит, название прячем, иначе надписи наезжают друг
+            # на друга.
+            if not self.push:
+                caption = get_font(self.font_1, 80 if big else 60).render(
+                    "Sea Battle", True, (255, 255, 255))
+                self.screen.blit(caption, caption.get_rect(
+                    center=(self.size[0] // 2, 105 if big else 75)))
 
             if hint:
                 surface = get_font(custom_font(2), 25).render(hint, True, (255, 255, 255))
@@ -331,8 +338,7 @@ class Statistic:
         self.path_config, self.path_achievements, self.path_statistic = os.path.join(
             path, "config.json"), os.path.join(path, "achievements.sqlite"), os.path.join(
             path, "statistic.json")
-        self.screen, self.fps, self.size = screen, fps, tuple(
-            map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
+        self.screen, self.fps, self.size = screen, fps, screen_size()
 
     async def menu(self):
         """Меню статистики"""
@@ -347,7 +353,8 @@ class Statistic:
         create_sprite(x, "x.png", self.size[0] - 100, 50, menu_sprites)
 
         mat = pygame.sprite.Sprite()
-        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, menu_sprites)
+        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, menu_sprites,
+                      stretch_to(f"mat_6_{self.size[1]}.png", self.size[0] - 100))
 
         while True:
             for event in pygame.event.get():
@@ -406,8 +413,7 @@ class Instruction:
 
     def __init__(self, screen, fps, path):
         self.path_config = os.path.join(path, "config.json")
-        self.screen, self.fps, self.size = screen, fps, tuple(
-            map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
+        self.screen, self.fps, self.size = screen, fps, screen_size()
 
     async def menu(self):
         """Меню обучения"""
@@ -429,7 +435,8 @@ class Instruction:
         create_sprite(x, "x.png", self.size[0] - 100, 50, menu_sprites)
 
         mat = pygame.sprite.Sprite()
-        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, menu_sprites)
+        create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, menu_sprites,
+                      stretch_to(f"mat_6_{self.size[1]}.png", self.size[0] - 100))
 
         while True:
             for event in pygame.event.get():

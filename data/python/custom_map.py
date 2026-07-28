@@ -7,7 +7,7 @@ import pygame.sprite
 import pygame.transform
 import os
 
-from .main_functions import create_sprite, get_values, terminate, get_font, CELL_RATIO
+from .main_functions import create_sprite, get_values, terminate, get_font, cell_size
 
 #: На сколько пикселей можно увести палец, чтобы касание всё ещё считалось
 #: нажатием, а не перетаскиванием.
@@ -265,9 +265,7 @@ class Customization:
             i.kill()
         up_per()
         self.clock = pg.time.Clock()
-        self.size = int(display_width * CELL_RATIO)
-        self.screensize = tuple(
-            map(int, (get_values(os.path.join(path, "config.json"), "screensize")[0].split("x"))))
+        self.size = cell_size(display_width, display_height)
         self.co = int(display_width * 0.02)
         self.font = get_font(self.font_2, int(self.size * 0.8))
 
@@ -277,6 +275,7 @@ class Customization:
         self.x_ship = int(display_width * 0.6)
         self.y_ship = int(display_height * 0.25)
 
+        self.prepare_hints()
         self.add_cells()
         self.add_ship()
 
@@ -308,19 +307,40 @@ class Customization:
         pg.draw.rect(self.sc, self.t[1], (x + self.co, y + self.co, self.size * 10, self.size * 10),
                      4)
 
-        pg.draw.rect(self.sc, self.t[1], (self.x_ship - 30, self.y_ship - 10,
-                                          (int(display_width * CELL_RATIO)) * 7,
-                                          (int(display_width * CELL_RATIO)) * 6), 4)
+        panel = pg.Rect(self.x_ship - 30, self.y_ship - 10, self.size * 7, self.size * 6)
+        pg.draw.rect(self.sc, self.t[1], panel, 4)
         text = self.font.render("Корабли:", True, self.t[1])
         self.sc.blit(text, (self.x_ship, self.y_ship))
 
-        font = get_font(self.font_2, int(self.size * 0.4))
-        text = font.render("Нажмите на корабль (или пробел), чтобы повернуть", True, self.t[1])
-        self.sc.blit(text, (self.x_ship - 30, int(display_height * 0.69)))
 
-        text = font.render("Если корабль не ставиться значит там его нельзя поставить!!!!", True,
-                           self.t[1])  # логично
-        self.sc.blit(text, (self.x_ship - 30, int(display_height * 0.4 + 240)))
+    HINTS = ("Нажмите на корабль (или пробел), чтобы повернуть",
+             "Если корабль не ставится, значит там его нельзя поставить")
+
+    def prepare_hints(self):
+        """Разместить подсказки и подобрать кегль под свободную ширину"""
+        # правее поля, иначе текст наезжает на сетку
+        self.hint_x = max(self.x_ship - 30,
+                          self.map_indent_left + self.co + self.size * 10 + 30)
+        self.hints_at = self.y_ship - 10 + self.size * 6 + 25
+
+        available = display_width - self.hint_x - 20
+        self.hint_size = 20
+        while self.hint_size > 12 and any(
+                get_font(self.font_2, self.hint_size).size(line)[0] > available
+                for line in self.HINTS):
+            self.hint_size -= 1
+
+    def draw_hints(self):
+        """Подсказки под панелью с кораблями.
+
+        Рисуются последними: клетки поля — непрозрачные спрайты и накрывают
+        всё, что нарисовано до них.
+        """
+        font = get_font(self.font_2, self.hint_size)
+        for i, line in enumerate(self.HINTS):
+            text = font.render(line, True, self.t[1])
+            self.sc.blit(text, text.get_rect(
+                midleft=(self.hint_x, self.hints_at + i * (self.hint_size + 6))))
 
     async def map_customization(self):
         running = True
@@ -379,6 +399,7 @@ class Customization:
             all_sprites_cell.draw(self.sc)
             all_sprites.draw(self.sc)
             self.all_sprite_gg.draw(self.sc)
+            self.draw_hints()
             self.clock.tick(self.fps)
             pg.display.flip()
             await asyncio.sleep(0)
@@ -388,7 +409,7 @@ class Customization:
         y = int(display_height * 0.25)
         indent_bottom = 10
         indent_right = 10
-        size = int(display_width * CELL_RATIO) - 10
+        size = cell_size(display_width, display_height) - 10
 
         for i in range(1, 5):
             for g in range(i):

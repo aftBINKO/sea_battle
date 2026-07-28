@@ -58,6 +58,22 @@ def web_log(*args):
         print(message)
 
 
+def viewport_aspect():
+    """Соотношение сторон окна браузера, либо None вне браузера"""
+    if not IS_WEB:
+        return None
+    try:
+        import platform
+
+        width = float(platform.window.innerWidth)
+        height = float(platform.window.innerHeight)
+        if width > 0 and height > 0:
+            return width / height
+    except Exception as error:
+        web_log(f"viewport failed: {error!r}")
+    return None
+
+
 def reload_page():
     """Перезагрузить страницу.
 

@@ -1,5 +1,5 @@
 from .main_functions import terminate, create_sprite, get_values, load_image, set_statistic, \
-    add_fon, custom_font, DragScroll, get_font, draw_scrollbar, CELL_RATIO
+    add_fon, custom_font, DragScroll, get_font, draw_scrollbar, cell_size, screen_size, stretch_to
 from .custom_map import Customization
 import asyncio
 import pygame as pg
@@ -268,8 +268,7 @@ class GameOver:
         self.path_config, path_statistic = os.path.join(
             path, "config.json"), os.path.join(path, "statistic.json")
 
-        self.size = tuple(
-            map(int, (get_values(self.path_config, "screensize")[0].split("x"))))
+        self.size = screen_size()
         self.win = win
         self.score = score
         self.xp = xp
@@ -298,7 +297,8 @@ class GameOver:
         game_over_sprites = pg.sprite.Group()
 
         mat = pg.sprite.Sprite()
-        create_sprite(mat, f"mat_7_{self.size[1]}.png", 50, 50, game_over_sprites)
+        create_sprite(mat, f"mat_7_{self.size[1]}.png", 50, 50, game_over_sprites,
+                      stretch_to(f"mat_7_{self.size[1]}.png", self.size[0] - 100))
 
         in_main_menu = pg.sprite.Sprite()
         create_sprite(in_main_menu, f"in_main_menu.png", self.size[0] // 2 - 125, self.size[1] - 150,
@@ -400,10 +400,7 @@ class PlayWithBot:
         display_height = sur.get_height()
 
         self.clock = pg.time.Clock()
-        self.size = int(display_width * CELL_RATIO)
-        self.screensize = tuple(
-            map(int, (get_values(os.path.join(self.path, "config.json"),
-                                 "screensize")[0].split("x"))))
+        self.size = cell_size(display_width, display_height)
         self.co = int(display_width * 0.02)
         self.font = get_font(self.font_2, int(self.size * 0.5))
 
@@ -562,8 +559,7 @@ class Play:
     def __init__(self, screen, fps, path):
         path_config = os.path.join(path, "config.json")
 
-        self.screen, self.fps, self.size, self.path_statistic = screen, fps, tuple(
-            map(int, (get_values(path_config, "screensize")[0].split("x")))), os.path.join(
+        self.screen, self.fps, self.size, self.path_statistic = screen, fps, screen_size(), os.path.join(
             path, "statistic.json")
 
     def surrender(self):
@@ -582,7 +578,8 @@ class Play:
         menu_sprites = pg.sprite.Group()
 
         mat = pg.sprite.Sprite()
-        create_sprite(mat, f"mat_5_{self.size[1]}.png", 0, 0, menu_sprites)
+        create_sprite(mat, f"mat_5_{self.size[1]}.png", 0, 0, menu_sprites,
+                      (self.size[0], self.size[1]))
 
         x = pg.sprite.Sprite()
         create_sprite(x, "x.png", self.size[0] - 100, 50, menu_sprites)
@@ -600,10 +597,19 @@ class Play:
         # вплотную справа от него: у края экрана она была оторвана от того,
         # чем управляет, а внутрь не помещается — длинные строки доходят до
         # самой кромки и обрезаются ею.
+        #
+        # Картинка кабины растягивается под ширину холста, вместе с ней едет и
+        # окно, поэтому границы пересчитываем в той же пропорции.
+        stretch = self.size[0] / (1366 if self.size[1] == 768 else 1920)
         if self.size[1] == 768:
-            window_right, window_top, window_bottom = 676, 256, 696
+            window_left, window_right, window_top, window_bottom = 56, 676, 256, 696
         else:
-            window_right, window_top, window_bottom = 956, 356, 980
+            window_left, window_right, window_top, window_bottom = 76, 956, 356, 980
+        window_left, window_right = int(window_left * stretch), int(window_right * stretch)
+
+        # Строка переносится по количеству символов — на широком окне их влезает
+        # больше, иначе текст жался бы в левую половину.
+        wrap = int(53 * stretch)
 
         mission = get_values(mission_file, "mission")[0]
 
@@ -619,19 +625,28 @@ class Play:
             play = pg.sprite.Sprite()
             create_sprite(play, "play_mini.png", self.size[0] - 150, self.size[1] - 100,
                           menu_sprites)
+        difficulty_name, difficulty_color = (
+            ("Обучение", (255, 255, 255)), ("Самый лёгкий", (66, 170, 255)),
+            ("Лёгкий", (0, 255, 0)), ("Нормальный", (255, 255, 0)),
+            ("Сложный", (255, 165, 0)), ("Невозможный", (255, 0, 0)),
+        )[int(get_values(mission_file, "difficulty")[0])]
+        reward_name = f"{get_values(mission_file, 'reward')[0]} XP"
+
         t = [["Задания", (255, 255, 255), 50, 50, 50, 1],
              ["Награда:", (255, 255, 255), self.size[0] - 300, self.size[1] - 130, 25, 1],
-             [f"{get_values(mission_file, 'reward')[0]} XP", (255, 255, 255),
-              self.size[0] - 215,
-              self.size[1] - 130, 25, 1],
+             [reward_name, (255, 255, 255), self.size[0] - 215, self.size[1] - 130, 25, 1],
              ["Сложность:", (255, 255, 255), self.size[0] - 300, self.size[1] - 155, 25, 1],
-             (["Обучение", (255, 255, 255), self.size[0] - 190, self.size[1] - 155, 25, 1],
-              ["Самый лёгкий", (66, 170, 255), self.size[0] - 190, self.size[1] - 155, 25, 1],
-              ["Лёгкий", (0, 255, 0), self.size[0] - 190, self.size[1] - 155, 25, 1],
-              ["Нормальный", (255, 255, 0), self.size[0] - 190, self.size[1] - 155, 25, 1],
-              ["Сложный", (255, 165, 0), self.size[0] - 190, self.size[1] - 155, 25, 1],
-              ["Невозможный", (255, 0, 0), self.size[0] - 190, self.size[1] - 155, 25, 1])[
-                 int(get_values(mission_file, "difficulty")[0])]]
+             [difficulty_name, difficulty_color, self.size[0] - 190, self.size[1] - 155, 25, 1]]
+
+        # Ширина подложки — по самой длинной надписи: "Невозможный" и
+        # "Самый лёгкий" вылезали за края плашки фиксированных 300 px.
+        info_font = get_font(custom_font(1), 25)
+        info_right = max(self.size[0] - 190 + info_font.size(difficulty_name)[0],
+                         self.size[0] - 215 + info_font.size(reward_name)[0])
+        info_rect = pg.Rect(self.size[0] - 310, self.size[1] - 165,
+                            info_right - (self.size[0] - 310) + 12, 60)
+        info_plate = pg.Surface(info_rect.size, pg.SRCALPHA)
+        info_plate.fill((12, 18, 28, 215))
         while True:
             self.screen.fill((0, 0, 0))
 
@@ -641,7 +656,7 @@ class Play:
 
                 while True:
                     try:
-                        if ln + len(words[i]) < 53 and "\\n" not in words[i]:
+                        if ln + len(words[i]) < wrap and "\\n" not in words[i]:
                             text, ln, i = text + words[i] + " ", ln + len(words[i]), i + 1
                         else:
                             words[i] = words[i].strip("\\n")
@@ -651,7 +666,7 @@ class Play:
                         break
 
                 c = 22 if self.size[1] == 768 else 30
-                texts.append([text, (192, 192, 192), 55 if self.size[1] == 768 else 75, y, c])
+                texts.append([text, (192, 192, 192), window_left, y, c])
                 y += c
 
             for j in texts:
@@ -723,6 +738,12 @@ class Play:
             menu_sprites.draw(self.screen)
 
             if get_values(mission_file, "mode")[0] != "text":
+                # Сложность и награда раньше ложились на тёмный участок самой
+                # картинки кабины. Она тянется пропорционально, а текст прибит
+                # к правому краю — на широком холсте они разъезжались, поэтому
+                # рисуем подложку сами.
+                self.screen.blit(info_plate, info_rect.topleft)
+
                 for j in t:
                     self.screen.blit(
                         get_font(custom_font(j[5]), j[4]).render(j[0], True, j[1]), (j[2], j[3]))
@@ -730,7 +751,7 @@ class Play:
             self.screen.blit(
                 get_font(self.font_1, 50).render(
                     get_values(mission_file, "name")[0], True, (255, 255, 255)),
-                (70 if self.size[1] == 768 else 80, 200 if self.size[1] == 768 else 300))
+                (window_left + 15, 200 if self.size[1] == 768 else 300))
 
             draw_scrollbar(
                 self.screen, window_right + 8, window_top, window_bottom - window_top,
@@ -753,7 +774,7 @@ class Board:
         display_height = sur.get_height()
 
         self.co = int(display_width * 0.02)
-        self.size = int(display_width * CELL_RATIO)
+        self.size = cell_size(display_width, display_height)
         self.font = get_font(None, int(self.size * 0.8))
         self.clock = pg.time.Clock()
 
