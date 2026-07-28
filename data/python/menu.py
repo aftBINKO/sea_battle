@@ -475,8 +475,16 @@ class Instruction:
                 kept.append(block)
             paragraphs = kept
 
-        y, c = 150, 25 if self.size[1] == 768 else 35
-        for line in "\n\n".join(paragraphs).split("\n"):
+        # Строки свёрстаны в самом файле под ширину 1366 и на узком холсте
+        # уезжают за край — подбираем кегль под самую длинную из них.
+        lines = "\n\n".join(paragraphs).split("\n")
+        c = 25 if self.size[1] == 768 else 35
+        while c > 14 and max((get_font(custom_font(2), c).size(line)[0]
+                              for line in lines), default=0) > self.size[0] - 200:
+            c -= 1
+
+        y = 150
+        for line in lines:
             text.append([line, (255, 255, 255), 100, y, c, 2])
             y += c
 
