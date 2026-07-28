@@ -417,7 +417,7 @@ class Instruction:
 
     async def menu(self):
         """Меню обучения"""
-        fon, s, text = pygame.transform.scale(load_image("fon_6.png"),
+        fon, s, text = pygame.transform.scale(load_image("fon_6.jpg"),
                                               self.size), pygame.mixer.Sound(
             self.click), [["Обучение", (255, 255, 255), 50, 50, 50, 1]]
 

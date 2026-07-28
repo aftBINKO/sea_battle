@@ -148,7 +148,7 @@ class Settings:
     async def menu(self):
         """Меню настроек"""
         clock = pygame.time.Clock()
-        fon = pygame.transform.scale(load_image("fon_3.png"), self.size)
+        fon = pygame.transform.scale(load_image("fon_3.jpg"), self.size)
 
         settings_sprites = pygame.sprite.Group()
 
@@ -159,8 +159,24 @@ class Settings:
         create_sprite(mat, f"mat_6_{self.size[1]}.png", 50, 100, settings_sprites,
                       stretch_to(f"mat_6_{self.size[1]}.png", self.size[0] - 100))
 
+        # Рамка опасной зоны — картинка фиксированной ширины 800. Если её
+        # центрировать, при ширине холста меньше ~1500 она наезжает на кнопки
+        # у правого края. В браузере строк настроек всего две, поэтому там
+        # кнопки уходят наверх, освобождая всю полосу под зону; на десктопе
+        # строк пять, места нет, и зона остаётся прижатой влево, как в оригинале.
+        if IS_WEB:
+            zone_x = max(50, (self.size[0] - 800) // 2)
+            buttons_y = self.size[1] - 390
+            developers_x = self.size[0] // 2 - 260
+            apply_x = self.size[0] // 2 + 10
+        else:
+            zone_x = 100
+            buttons_y = None
+            developers_x = apply_x = self.size[0] - 350
+
         apply = pygame.sprite.Sprite()
-        create_sprite(apply, "apply.png", self.size[0] - 350, self.size[1] - 150, settings_sprites)
+        create_sprite(apply, "apply.png", apply_x,
+                      buttons_y if buttons_y else self.size[1] - 150, settings_sprites)
 
         # Строки настроек описаны таблицей: раньше на каждую приходилось по две
         # почти одинаковых ветки обработки, а зоны нажатия были размером со
@@ -206,12 +222,8 @@ class Settings:
         # create_sprite(load, "load.png", self.size[0] - 220, 150, settings_sprites)
 
         developers = pygame.sprite.Sprite()
-        create_sprite(developers, "developers.png", self.size[0] - 350, self.size[1] - 250,
-                      settings_sprites)
-
-        # Рамка опасной зоны — картинка фиксированной ширины 800, центруем её
-        # вместе с кнопками, иначе на широком экране она липнет к левому краю.
-        zone_x = (self.size[0] - 800) // 2
+        create_sprite(developers, "developers.png", developers_x,
+                      buttons_y if buttons_y else self.size[1] - 250, settings_sprites)
 
         danger_zone = pygame.sprite.Sprite()
         create_sprite(danger_zone, "danger_zone.png", zone_x, self.size[1] - 300,
@@ -337,8 +349,14 @@ class Settings:
                 self.screen.blit(
                     get_font(custom_font(1), 50).render(caption, True, (255, 255, 255)), (100, y))
 
-                value = get_font(custom_font(2), 50).render(
-                    str(values[getattr(self, field)]), True, (255, 255, 255))
+                # На узком холсте длинные значения вроде by_time_of_day
+                # дотягивались до стрелок — ужимаем кегль под свою зону.
+                label, size = str(values[getattr(self, field)]), 50
+                while size > 24 and get_font(
+                        custom_font(2), size).size(label)[0] > value_area.width - 12:
+                    size -= 2
+
+                value = get_font(custom_font(2), size).render(label, True, (255, 255, 255))
                 self.screen.blit(value, value.get_rect(center=value_area.center))
 
             pygame.display.flip()

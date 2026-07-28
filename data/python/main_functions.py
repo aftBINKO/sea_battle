@@ -202,10 +202,10 @@ def create_sprite(sprite, name, x, y, group, transform=None):
 
 def add_fon(theme_value, size):
     """Функция ставит фон"""
-    return pygame.transform.scale(load_image("fon_2.png"), size) if not (theme_value == "day" or (
+    return pygame.transform.scale(load_image("fon_2.jpg"), size) if not (theme_value == "day" or (
             theme_value == "by_time_of_day" and 8 <= int(datetime.now().time().strftime("%H")
                                                          ) <= 18)) else pygame.transform.scale(
-        load_image("fon_1.png"), size)
+        load_image("fon_1.jpg"), size)
 
 
 def custom_font(x):

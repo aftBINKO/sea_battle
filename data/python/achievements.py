@@ -42,7 +42,7 @@ class Achievements:
 
     async def menu(self):
         """Меню достижений"""
-        fon = pygame.transform.scale(load_image("fon_4.png"), self.size)
+        fon = pygame.transform.scale(load_image("fon_4.jpg"), self.size)
 
         clock = pygame.time.Clock()
 
@@ -254,7 +254,7 @@ class Titles:
 
     async def menu(self):
         """Меню титулов"""
-        fon, s = pygame.transform.scale(load_image("fon_5.png"), self.size), pygame.mixer.Sound(
+        fon, s = pygame.transform.scale(load_image("fon_5.jpg"), self.size), pygame.mixer.Sound(
             self.click)
 
         clock = pygame.time.Clock()
